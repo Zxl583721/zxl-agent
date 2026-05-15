@@ -1,0 +1,12 @@
+.env
+__pycache__/
+*.py[cod]
+
+.venv/
+venv/
+env/
+
+# Local vector database/cache files.
+vector_store/*
+!vector_store/.gitkeep
+
