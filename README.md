@@ -9,9 +9,8 @@
 建议先创建虚拟环境：
 
 ```bash
-cd rag-agent
-python -m venv .venv
-source .venv/bin/activate
+conda create -p ./.conda python=3.11
+conda activate ./.conda
 pip install -r requirements.txt
 ```
 
@@ -31,11 +30,31 @@ ZHIPUAI_API_KEY=your_api_key_here
 
 ## 运行项目
 
+如果已经把 `.txt` 知识库文件放入 `data/`，可以先构建向量索引：
+
+```bash
+python build_index.py
+```
+
+当前索引会保存到 `vector_store/` 目录中的本地 Chroma 数据库。如果还没有上传知识库文件，可以先跳过这一步。
+
 ```bash
 python main.py
 ```
 
 进入命令行交互后，输入问题即可提问；输入 `exit` 退出。
+
+也可以启动本地网页界面：
+
+```bash
+python web_app.py
+```
+
+然后打开浏览器访问：
+
+```text
+http://127.0.0.1:5000
+```
 
 ## 添加知识库文件
 
@@ -53,13 +72,17 @@ data/project_docs.txt
 ## 项目结构
 
 ```text
-rag-agent/
+zxl-agent/
 ├── .env.example
 ├── .gitignore
 ├── README.md
 ├── requirements.txt
+├── build_index.py
 ├── main.py
+├── web_app.py
 ├── config.py
+├── templates/
+│   └── index.html
 ├── data/
 │   └── .gitkeep
 ├── vector_store/
@@ -73,4 +96,3 @@ rag-agent/
     ├── zhipu_llm.py
     └── rag_agent.py
 ```
-

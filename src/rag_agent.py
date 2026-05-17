@@ -9,13 +9,21 @@ class RAGAgent:
         return self.retriever.has_documents()
 
     def answer(self, question: str) -> str:
+        setup_error = getattr(self.retriever, "setup_error", "")
+        if setup_error:
+            return setup_error
+
         if not self.has_knowledge_base():
             return (
-                "当前还没有加载到知识库内容。请先把 .txt 文件放入 data/ 文件夹，"
-                "然后重新运行 python main.py。"
+                "当前还没有加载到 Chroma 向量索引。请先把 .txt 文件放入 data/ 文件夹，"
+                "然后运行 python build_index.py 构建索引。"
             )
 
-        retrieved_chunks = self.retriever.retrieve(question, top_k=3)
+        try:
+            retrieved_chunks = self.retriever.retrieve(question, top_k=3)
+        except RuntimeError as exc:
+            return str(exc)
+
         if not retrieved_chunks:
             return "我没有在当前知识库中检索到相关内容，可以换个问法试试。"
 
@@ -45,4 +53,3 @@ class RAGAgent:
 
 【回答】
 """
-
