@@ -222,7 +222,7 @@
         <p id="statusText" class="status-value pending">正在检查索引...</p>
       </section>
       <p class="tips">
-        将 txt 文件放入 data/ 后，先运行 python build_index.py 构建 Chroma 索引，再回到这里提问。
+        将 txt、pdf、docx 或 pptx 文件放入 data/ 后，先运行 python build_index.py 构建 Chroma 索引，再回到这里提问。
       </p>
     </aside>
 
@@ -251,6 +251,8 @@
     const input = document.querySelector("#questionInput");
     const button = document.querySelector("#sendButton");
     const statusText = document.querySelector("#statusText");
+    const chatHistory = [];
+    const maxHistoryMessages = 10;
 
     function appendMessage(role, text) {
       const node = document.createElement("div");
@@ -261,6 +263,12 @@
     }
 
     async function loadStatus() {
+      if (window.location.protocol === "file:") {
+        statusText.textContent = "请通过 http://127.0.0.1:5001 打开页面，直接打开 HTML 文件无法调用后端。";
+        statusText.className = "status-value pending";
+        return;
+      }
+
       const response = await fetch("/api/status");
       const status = await response.json();
       statusText.textContent = status.message;
@@ -273,6 +281,10 @@
       if (!question) {
         return;
       }
+      if (window.location.protocol === "file:") {
+        appendMessage("agent", "请先启动 Flask 服务，并访问 http://127.0.0.1:5001 后再提问。");
+        return;
+      }
 
       appendMessage("user", question);
       input.value = "";
@@ -283,10 +295,18 @@
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question }),
+          body: JSON.stringify({
+            question,
+            history: chatHistory.slice(-maxHistoryMessages),
+          }),
         });
         const data = await response.json();
-        appendMessage("agent", data.answer || "没有返回内容。");
+        const answer = data.answer || "没有返回内容。";
+        appendMessage("agent", answer);
+        chatHistory.push(
+          { role: "user", content: question },
+          { role: "assistant", content: answer },
+        );
       } catch (error) {
         appendMessage("agent", "请求失败，请确认本地服务仍在运行。");
       } finally {

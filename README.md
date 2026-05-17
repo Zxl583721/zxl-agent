@@ -30,7 +30,7 @@ ZHIPUAI_API_KEY=your_api_key_here
 
 ## 运行项目
 
-如果已经把 `.txt` 知识库文件放入 `data/`，可以先构建向量索引：
+如果已经把知识库文件放入 `data/`，可以先构建向量索引：
 
 ```bash
 python build_index.py
@@ -53,21 +53,24 @@ python web_app.py
 然后打开浏览器访问：
 
 ```text
-http://127.0.0.1:5000
+http://127.0.0.1:5001
 ```
 
 ## 添加知识库文件
 
 后续可以把个人知识库原始文件放入 `data/` 文件夹。
 
-当前基础代码先支持读取 `.txt` 文件。你可以放入类似：
+当前支持读取 `.txt`、`.pdf`、`.docx`、`.pptx` 文件。你可以放入类似：
 
 ```text
 data/my_notes.txt
 data/project_docs.txt
+data/product_manual.pdf
+data/meeting_notes.docx
+data/training_slides.pptx
 ```
 
-后续可以在 `src/document_loader.py` 中扩展 PDF、Word、Markdown 等格式的加载逻辑。
+如果新增了文件，重新运行 `python build_index.py` 后会重建本地 Chroma 索引。
 
 ## 项目结构
 

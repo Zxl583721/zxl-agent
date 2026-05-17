@@ -3,7 +3,7 @@ import math
 from pathlib import Path
 import re
 
-from src.embedding import embed_text
+from src.langchain_zhipu import ZhipuEmbeddings
 
 
 TOKEN_PATTERN = re.compile(r"[\w\u4e00-\u9fff]+")
@@ -70,17 +70,22 @@ class ChromaRetriever:
         self.persist_dir = Path(persist_dir)
         self.collection_name = collection_name
         self.setup_error = ""
+        self.vectorstore = None
         self.collection = None
 
         try:
-            import chromadb
+            from langchain_chroma import Chroma
         except ImportError:
-            self.setup_error = "未安装 chromadb。请先运行 pip install -r requirements.txt。"
+            self.setup_error = "未安装 LangChain Chroma。请先运行 pip install -r requirements.txt。"
             return
 
         try:
-            client = chromadb.PersistentClient(path=str(self.persist_dir))
-            self.collection = client.get_or_create_collection(name=self.collection_name)
+            self.vectorstore = Chroma(
+                collection_name=self.collection_name,
+                embedding_function=ZhipuEmbeddings(),
+                persist_directory=str(self.persist_dir),
+            )
+            self.collection = self.vectorstore._collection
         except Exception as exc:
             self.setup_error = f"加载 Chroma 向量库失败：{exc}"
 
@@ -90,26 +95,16 @@ class ChromaRetriever:
         return self.collection.count() > 0
 
     def retrieve(self, query: str, top_k: int = 3) -> list[dict]:
-        if self.collection is None:
+        if self.vectorstore is None:
             return []
 
-        query_embedding = embed_text(query)
-        results = self.collection.query(
-            query_embeddings=[query_embedding],
-            n_results=top_k,
-            include=["documents", "metadatas", "distances"],
-        )
-
-        documents = results.get("documents", [[]])[0]
-        metadatas = results.get("metadatas", [[]])[0]
-        distances = results.get("distances", [[]])[0]
-
         chunks = []
-        for document, metadata, distance in zip(documents, metadatas, distances):
+        results = self.vectorstore.similarity_search_with_score(query, k=top_k)
+        for document, distance in results:
             chunks.append(
                 {
-                    "text": document,
-                    "metadata": metadata or {},
+                    "text": document.page_content,
+                    "metadata": document.metadata or {},
                     "score": 1 / (1 + distance),
                 }
             )

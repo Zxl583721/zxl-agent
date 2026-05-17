@@ -47,11 +47,15 @@ def status():
 def chat():
     data = request.get_json(silent=True) or {}
     question = str(data.get("question", "")).strip()
+    history = data.get("history")
 
     if not question:
         return jsonify({"answer": "请输入一个问题。"}), 400
 
-    answer = agent.answer(question)
+    if not isinstance(history, list):
+        history = []
+
+    answer = agent.answer(question, history=history)
     return jsonify({"answer": answer})
 
 
@@ -62,4 +66,4 @@ def _status_message(has_index: bool, document_count: int) -> str:
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    app.run(host="127.0.0.1", port=5001, debug=False)

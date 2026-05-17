@@ -15,6 +15,7 @@ def build_agent() -> RAGAgent:
 
 def main() -> None:
     agent = build_agent()
+    history = []
 
     print("RAG Agent 已启动。输入问题开始提问，输入 exit 退出。")
     if getattr(agent.retriever, "setup_error", ""):
@@ -30,8 +31,14 @@ def main() -> None:
         if not question:
             continue
 
-        answer = agent.answer(question)
+        answer = agent.answer(question, history=history)
         print(f"\nAgent：{answer}")
+        history.extend(
+            [
+                {"role": "user", "content": question},
+                {"role": "assistant", "content": answer},
+            ]
+        )
 
 
 if __name__ == "__main__":

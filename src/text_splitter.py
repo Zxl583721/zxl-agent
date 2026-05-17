@@ -1,5 +1,5 @@
 def split_text(text: str, chunk_size: int = 800, chunk_overlap: int = 100) -> list[str]:
-    """Split text into overlapping chunks."""
+    """Split text into overlapping chunks using LangChain's recursive splitter."""
     if chunk_size <= 0:
         raise ValueError("chunk_size must be greater than 0")
     if chunk_overlap < 0:
@@ -11,16 +11,11 @@ def split_text(text: str, chunk_size: int = 800, chunk_overlap: int = 100) -> li
     if not clean_text:
         return []
 
-    chunks = []
-    start = 0
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-    while start < len(clean_text):
-        end = start + chunk_size
-        chunks.append(clean_text[start:end])
-
-        if end >= len(clean_text):
-            break
-        start = end - chunk_overlap
-
-    return chunks
-
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        separators=["\n\n", "\n", "。", "！", "？", ".", " ", ""],
+    )
+    return splitter.split_text(clean_text)
