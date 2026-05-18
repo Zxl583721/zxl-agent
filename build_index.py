@@ -129,6 +129,10 @@ def build_index(chunk_size: int = 800, chunk_overlap: int = 100, batch_size: int
             print(f"向量化失败：{exc}")
             print("请确认已经安装依赖，并在 .env 中配置 ZHIPUAI_API_KEY。")
             return
+        except UnicodeEncodeError as exc:
+            print(f"向量化失败：知识库文本中包含无法编码的特殊字符，已停止写入。错误：{exc}")
+            print("请重新运行 python build_index.py，程序会在入库前清理这类字符。")
+            return
 
     print(f"Chroma 索引构建完成：{VECTOR_STORE_DIR}")
 

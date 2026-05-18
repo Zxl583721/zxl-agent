@@ -5,6 +5,9 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     """Create embeddings for a list of texts using ZhipuAI."""
     if not ZHIPUAI_API_KEY:
         raise RuntimeError("ZHIPUAI_API_KEY is missing. Please set it in .env.")
+    texts = [clean_embedding_text(text) for text in texts]
+    texts = [text for text in texts if text]
+
     if not texts:
         return []
 
@@ -29,3 +32,8 @@ def embed_text(text: str) -> list[float]:
     """Create one embedding vector for a single text."""
     vectors = embed_texts([text])
     return vectors[0] if vectors else []
+
+
+def clean_embedding_text(text: str) -> str:
+    """Drop invalid Unicode before sending text through the JSON API."""
+    return str(text).encode("utf-8", errors="ignore").decode("utf-8").strip()

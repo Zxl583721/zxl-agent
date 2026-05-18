@@ -14,7 +14,7 @@ def load_documents(data_dir: str | Path) -> list[dict]:
         if not file_path.is_file() or file_path.suffix.lower() not in SUPPORTED_EXTENSIONS:
             continue
 
-        content = load_file_content(file_path)
+        content = clean_text(load_file_content(file_path))
 
         if content:
             documents.append(
@@ -46,6 +46,14 @@ def load_file_content(file_path: Path) -> str:
         return load_pptx_content(file_path)
 
     return ""
+
+
+def clean_text(text: str) -> str:
+    """Remove invalid Unicode code points that cannot be sent as JSON."""
+    if not text:
+        return ""
+
+    return text.encode("utf-8", errors="ignore").decode("utf-8").strip()
 
 
 def load_txt_content(file_path: Path) -> str:
