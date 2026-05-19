@@ -4,10 +4,10 @@ from typing import TypeVar
 
 from langchain_core.documents import Document
 
-from src.document_loader import SUPPORTED_EXTENSIONS, load_documents
+from src.document_loader import SUPPORTED_EXTENSIONS, load_document_pages
 from src.langchain_zhipu import ZhipuEmbeddings
 from src.retriever import COLLECTION_NAME
-from src.text_splitter import split_text
+from src.section_splitter import group_pages_into_sections, split_sections_into_chunks
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -17,31 +17,25 @@ T = TypeVar("T")
 
 
 def build_documents(chunk_size: int, chunk_overlap: int) -> list[Document]:
-    """Load local documents and split them into LangChain documents."""
-    documents = load_documents(DATA_DIR)
-    langchain_documents = []
+    """Load local documents and split them into chapter-aware LangChain documents."""
+    pages = load_document_pages(DATA_DIR)
+    sections = group_pages_into_sections(pages)
+    chunks = split_sections_into_chunks(
+        sections,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+    )
 
-    for document in documents:
-        text_chunks = split_text(
-            document["content"],
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
+    return [
+        Document(
+            page_content=chunk["text"],
+            metadata={
+                "id": chunk["id"],
+                **chunk["metadata"],
+            },
         )
-
-        for index, text in enumerate(text_chunks):
-            source_path = Path(document["source"])
-            langchain_documents.append(
-                Document(
-                    page_content=text,
-                    metadata={
-                        "id": f"{source_path.name}-{index}",
-                        "source": document["source"],
-                        "chunk_index": index,
-                    },
-                )
-            )
-
-    return langchain_documents
+        for chunk in chunks
+    ]
 
 
 def build_chunks(chunk_size: int, chunk_overlap: int) -> list[dict]:

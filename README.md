@@ -72,6 +72,12 @@ data/training_slides.pptx
 
 如果新增了文件，重新运行 `python build_index.py` 后会重建本地 Chroma 索引。
 
+## 知识库切分策略
+
+索引构建时会先保留 PDF 页码或 PPT 幻灯片页码，再识别“第 X 讲/章/节”、多级数字标题和中文序号标题等章节结构。程序会按章节聚合资料内容，并在章节内部使用递归文本切分生成向量块。
+
+每个文本块会写入来源文件、章节标题、起止页码、章节序号和块序号等 metadata，便于检索结果在回答时展示来源、章节和页码。
+
 ## 项目结构
 
 ```text
@@ -93,6 +99,7 @@ zxl-agent/
 └── src/
     ├── __init__.py
     ├── document_loader.py
+    ├── section_splitter.py
     ├── text_splitter.py
     ├── embedding.py
     ├── retriever.py

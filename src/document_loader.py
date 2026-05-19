@@ -5,26 +5,46 @@ SUPPORTED_EXTENSIONS = {".txt", ".pdf", ".docx", ".pptx"}
 
 def load_documents(data_dir: str | Path) -> list[dict]:
     """Load supported knowledge base files from the data directory."""
+    page_documents = load_document_pages(data_dir)
+    grouped_documents: dict[str, list[str]] = {}
+
+    for page in page_documents:
+        grouped_documents.setdefault(page["source"], []).append(page["text"])
+
+    return [
+        {
+            "source": source,
+            "content": clean_text("\n\n".join(texts)),
+        }
+        for source, texts in grouped_documents.items()
+        if clean_text("\n\n".join(texts))
+    ]
+
+
+def load_document_pages(data_dir: str | Path) -> list[dict]:
+    """Load supported knowledge base files while preserving page or slide metadata."""
     data_path = Path(data_dir)
     if not data_path.exists():
         return []
 
-    documents = []
+    pages = []
     for file_path in sorted(data_path.iterdir()):
         if not file_path.is_file() or file_path.suffix.lower() not in SUPPORTED_EXTENSIONS:
             continue
 
-        content = clean_text(load_file_content(file_path))
+        for page in load_file_pages(file_path):
+            text = clean_text(page.get("text", ""))
+            if text:
+                pages.append(
+                    {
+                        "source": str(file_path),
+                        "filename": file_path.name,
+                        "page": page.get("page"),
+                        "text": text,
+                    }
+                )
 
-        if content:
-            documents.append(
-                {
-                    "source": str(file_path),
-                    "content": content,
-                }
-            )
-
-    return documents
+    return pages
 
 
 def load_txt_documents(data_dir: str | Path) -> list[dict]:
@@ -34,18 +54,25 @@ def load_txt_documents(data_dir: str | Path) -> list[dict]:
 
 def load_file_content(file_path: Path) -> str:
     """Extract plain text from one supported knowledge base file."""
+    return "\n\n".join(page["text"] for page in load_file_pages(file_path)).strip()
+
+
+def load_file_pages(file_path: Path) -> list[dict]:
+    """Extract plain text pages or slides from one supported knowledge base file."""
     suffix = file_path.suffix.lower()
 
     if suffix == ".txt":
-        return load_txt_content(file_path)
+        content = load_txt_content(file_path)
+        return [{"page": 1, "text": content}] if content else []
     if suffix == ".pdf":
-        return load_pdf_content(file_path)
+        return load_pdf_pages(file_path)
     if suffix == ".docx":
-        return load_docx_content(file_path)
+        content = load_docx_content(file_path)
+        return [{"page": 1, "text": content}] if content else []
     if suffix == ".pptx":
-        return load_pptx_content(file_path)
+        return load_pptx_pages(file_path)
 
-    return ""
+    return []
 
 
 def clean_text(text: str) -> str:
@@ -64,6 +91,10 @@ def load_txt_content(file_path: Path) -> str:
 
 
 def load_pdf_content(file_path: Path) -> str:
+    return "\n\n".join(page["text"] for page in load_pdf_pages(file_path)).strip()
+
+
+def load_pdf_pages(file_path: Path) -> list[dict]:
     try:
         from pypdf import PdfReader
     except ImportError as exc:
@@ -74,8 +105,8 @@ def load_pdf_content(file_path: Path) -> str:
     for page_number, page in enumerate(reader.pages, start=1):
         text = (page.extract_text() or "").strip()
         if text:
-            pages.append(f"第 {page_number} 页\n{text}")
-    return "\n\n".join(pages).strip()
+            pages.append({"page": page_number, "text": f"第 {page_number} 页\n{text}"})
+    return pages
 
 
 def load_docx_content(file_path: Path) -> str:
@@ -98,6 +129,10 @@ def load_docx_content(file_path: Path) -> str:
 
 
 def load_pptx_content(file_path: Path) -> str:
+    return "\n\n".join(page["text"] for page in load_pptx_pages(file_path)).strip()
+
+
+def load_pptx_pages(file_path: Path) -> list[dict]:
     try:
         from pptx import Presentation
     except ImportError as exc:
@@ -121,6 +156,6 @@ def load_pptx_content(file_path: Path) -> str:
                     texts.append(" | ".join(cells))
 
         if texts:
-            slides.append(f"第 {slide_number} 页\n" + "\n".join(texts))
+            slides.append({"page": slide_number, "text": f"第 {slide_number} 页\n" + "\n".join(texts)})
 
-    return "\n\n".join(slides).strip()
+    return slides
