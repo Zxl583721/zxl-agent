@@ -55,8 +55,8 @@ def chat():
     if not isinstance(history, list):
         history = []
 
-    answer = agent.answer(question, history=history)
-    return jsonify({"answer": answer})
+    result = agent.answer_with_sources(question, history=history)
+    return jsonify(result)
 
 
 def _status_message(has_index: bool, document_count: int) -> str:

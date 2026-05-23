@@ -197,6 +197,30 @@
       max-width: 100%;
     }
 
+    .sources {
+      margin-top: 12px;
+      border-top: 1px solid var(--line);
+      padding-top: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .sources-title {
+      margin: 0 0 6px;
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .sources-list {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    .sources-list li {
+      margin: 4px 0;
+    }
+
     .composer {
       border-top: 1px solid var(--line);
       background: var(--panel);
@@ -331,11 +355,12 @@
     const chatHistory = [];
     const maxHistoryMessages = 10;
 
-    function appendMessage(role, text) {
+    function appendMessage(role, text, sources = []) {
       const node = document.createElement("div");
       node.className = `message ${role}`;
       if (role === "agent") {
         renderMarkdownMessage(node, text);
+        renderSources(node, sources);
       } else {
         node.textContent = text;
       }
@@ -360,6 +385,33 @@
       if (window.MathJax?.typesetPromise) {
         window.MathJax.typesetPromise([node]).catch(() => {});
       }
+    }
+
+    function renderSources(node, sources) {
+      if (!Array.isArray(sources) || sources.length === 0) {
+        return;
+      }
+
+      const wrapper = document.createElement("section");
+      wrapper.className = "sources";
+
+      const title = document.createElement("p");
+      title.className = "sources-title";
+      title.textContent = "参考来源";
+      wrapper.appendChild(title);
+
+      const list = document.createElement("ol");
+      list.className = "sources-list";
+
+      sources.forEach((source) => {
+        const item = document.createElement("li");
+        const pageRange = source.page_range || "未知";
+        item.textContent = `来源：${source.source || "unknown"}；章节：${source.chapter || "未识别章节"}；页码：${pageRange}`;
+        list.appendChild(item);
+      });
+
+      wrapper.appendChild(list);
+      node.appendChild(wrapper);
     }
 
     async function loadStatus() {
@@ -402,7 +454,7 @@
         });
         const data = await response.json();
         const answer = data.answer || "没有返回内容。";
-        appendMessage("agent", answer);
+        appendMessage("agent", answer, data.sources || []);
         chatHistory.push(
           { role: "user", content: question },
           { role: "assistant", content: answer },

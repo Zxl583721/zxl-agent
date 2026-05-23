@@ -18,33 +18,40 @@ class RAGAgent:
         return self.retriever.has_documents()
 
     def answer(self, question: str, history: list[dict] | None = None) -> str:
+        return self.answer_with_sources(question, history=history)["answer"]
+
+    def answer_with_sources(self, question: str, history: list[dict] | None = None) -> dict:
         setup_error = getattr(self.retriever, "setup_error", "")
         if setup_error:
-            return setup_error
+            return {"answer": setup_error, "sources": []}
 
         if not self.has_knowledge_base():
-            return (
-                "当前还没有加载到 Chroma 向量索引。请先把 txt、pdf、docx 或 pptx 文件放入 data/ 文件夹，"
-                "然后运行 python build_index.py 构建索引。"
-            )
+            return {
+                "answer": (
+                    "当前还没有加载到 Chroma 向量索引。请先把 txt、pdf、docx 或 pptx 文件放入 data/ 文件夹，"
+                    "然后运行 python build_index.py 构建索引。"
+                ),
+                "sources": [],
+            }
 
         try:
             resolved_question = self._resolve_question(question, history)
             retrieved_chunks = self.retriever.retrieve(resolved_question, top_k=3)
         except RuntimeError as exc:
-            return str(exc)
+            return {"answer": str(exc), "sources": []}
 
         if not retrieved_chunks:
-            return "我没有在当前知识库中检索到相关内容，可以换个问法试试。"
+            return {"answer": "我没有在当前知识库中检索到相关内容，可以换个问法试试。", "sources": []}
 
         context = self._format_context(retrieved_chunks)
-        return self.chain.invoke(
+        answer = self.chain.invoke(
             {
                 "chat_history": self._normalize_history(history),
                 "context": context,
                 "question": resolved_question,
             }
         )
+        return {"answer": answer, "sources": self._format_sources(retrieved_chunks)}
 
     @staticmethod
     def _format_context(chunks: list[dict]) -> str:
@@ -62,6 +69,35 @@ class RAGAgent:
                 f"内容：{chunk['text']}"
             )
         return "\n\n".join(context_parts)
+
+    @staticmethod
+    def _format_sources(chunks: list[dict]) -> list[dict]:
+        sources = []
+        seen = set()
+
+        for chunk in chunks:
+            metadata = chunk.get("metadata", {})
+            source = metadata.get("filename") or metadata.get("source", "unknown")
+            chapter = metadata.get("chapter", "未识别章节")
+            start_page = metadata.get("start_page") or ""
+            end_page = metadata.get("end_page") or start_page
+            key = (source, chapter, start_page, end_page)
+
+            if key in seen:
+                continue
+
+            seen.add(key)
+            sources.append(
+                {
+                    "source": source,
+                    "chapter": chapter,
+                    "start_page": start_page,
+                    "end_page": end_page,
+                    "page_range": _format_page_range(start_page, end_page),
+                }
+            )
+
+        return sources
 
     @staticmethod
     def _normalize_history(history: list[dict] | None) -> list[BaseMessage]:
@@ -126,11 +162,7 @@ class RAGAgent:
                     """请优先根据【知识库资料】回答用户问题。
 如果资料中没有答案，请明确说明“知识库中没有找到相关信息”，不要编造。
 回答中如果引用具体资料，请优先结合资料的来源、章节和页码判断上下文。
-如果根据知识库资料回答，回答末尾必须添加“参考来源”部分，列出用到的来源、章节和页码。
-参考来源格式固定为：
-参考来源：
-- 来源：xxx；章节：xxx；页码：x-y
-如果知识库资料不足以回答问题，则不要编造参考来源。
+不要在回答正文中编造、改写或额外生成参考来源；参考来源会由系统根据检索结果单独展示。
 如果用户问题是追问，请结合历史对话解析“他/它/其/这个”等指代，只回答该指代对象。
 历史对话只用于理解当前问题的指代和上下文，不要复述、总结或回答历史问题。
 最终回答必须聚焦【用户问题】中的当前问题，不要把前几轮的问题或答案混入回答。
