@@ -5,6 +5,18 @@ from collections import Counter
 
 LATIN_TOKEN_PATTERN = re.compile(r"[a-zA-Z0-9_]+")
 CJK_PATTERN = re.compile(r"[\u4e00-\u9fff]")
+OUTLINE_SOURCE_MARKERS = ("前言", "课程安排", "参考及要求")
+COURSE_SOURCE_HINTS = (
+    (("雷达方程", "原理", "组成", "历史"), "第1讲"),
+    (("噪声", "信号检测", "门限", "虚警"), "第2讲"),
+    (("测距", "测速", "测角", "精度"), "第3讲"),
+    (("杂波",), "第4讲"),
+    (("传播", "损耗"), "第5讲"),
+    (("天线", "相控阵", "波束", "扫描"), "第6讲"),
+    (("发射", "接收"), "第7讲"),
+    (("试验", "测量"), "第8讲"),
+    (("对抗", "干扰"), "第9讲"),
+)
 
 
 class LightweightReranker:
@@ -20,10 +32,14 @@ class LightweightReranker:
         vector_weight: float = 0.20,
         lexical_weight: float = 0.65,
         metadata_weight: float = 0.15,
+        source_hint_weight: float = 0.20,
+        outline_penalty: float = 0.20,
     ):
         self.vector_weight = vector_weight
         self.lexical_weight = lexical_weight
         self.metadata_weight = metadata_weight
+        self.source_hint_weight = source_hint_weight
+        self.outline_penalty = outline_penalty
 
     def rerank(self, query: str, chunks: list[dict], top_k: int) -> list[dict]:
         if not chunks or top_k <= 0:
@@ -36,10 +52,14 @@ class LightweightReranker:
         for index, chunk in enumerate(chunks):
             lexical_score = cosine_similarity(query_tokens, tokenize(chunk.get("text", "")))
             metadata_score = self._metadata_match_score(query_tokens, chunk.get("metadata", {}))
+            source_hint_score = self._source_hint_score(query, chunk.get("metadata", {}))
+            outline_penalty = self._outline_penalty(chunk.get("metadata", {}))
             rerank_score = (
                 self.vector_weight * vector_scores[index]
                 + self.lexical_weight * lexical_score
                 + self.metadata_weight * metadata_score
+                + self.source_hint_weight * source_hint_score
+                - outline_penalty
             )
             scored_chunks.append(
                 (
@@ -63,6 +83,19 @@ class LightweightReranker:
             if key in {"filename", "source", "chapter"}
         )
         return cosine_similarity(query_tokens, tokenize(metadata_text))
+
+    def _source_hint_score(self, query: str, metadata: dict) -> float:
+        source_text = metadata_source_text(metadata)
+        for query_markers, source_marker in COURSE_SOURCE_HINTS:
+            if source_marker in source_text and any(marker in query for marker in query_markers):
+                return 1.0
+        return 0.0
+
+    def _outline_penalty(self, metadata: dict) -> float:
+        source_text = metadata_source_text(metadata)
+        if any(marker in source_text for marker in OUTLINE_SOURCE_MARKERS):
+            return self.outline_penalty
+        return 0.0
 
 
 def tokenize(text: str) -> Counter:
@@ -97,3 +130,10 @@ def normalize_scores(scores: list[float]) -> list[float]:
         return [1.0 for _ in scores]
 
     return [(score - min_score) / (max_score - min_score) for score in scores]
+
+
+def metadata_source_text(metadata: dict) -> str:
+    return " ".join(
+        str(metadata.get(key, ""))
+        for key in ("filename", "source", "chapter")
+    )

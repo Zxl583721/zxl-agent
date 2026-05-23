@@ -1,0 +1,48 @@
+[
+  {
+    "id": "radar_equation_basic",
+    "question": "雷达方程描述了哪些量之间的关系？",
+    "expected_sources": ["第1讲 原理组成、历史方程.pdf"],
+    "expected_keywords": ["发射功率", "天线", "目标", "距离", "回波"]
+  },
+  {
+    "id": "noise_detection",
+    "question": "噪声中的信号检测为什么需要设置检测门限？",
+    "expected_sources": ["第2讲  噪声中的信号检测.pdf"],
+    "expected_keywords": ["噪声", "门限", "虚警", "检测"]
+  },
+  {
+    "id": "range_velocity_angle_accuracy",
+    "question": "测距、测速和测角精度主要受哪些因素影响？",
+    "expected_sources": ["第3讲 测距测速测角精度理论.pdf"],
+    "expected_keywords": ["测距", "测速", "测角", "精度"]
+  },
+  {
+    "id": "clutter_theory",
+    "question": "雷达杂波会对目标检测产生什么影响？",
+    "expected_sources": ["第4讲 雷达杂波理论.pdf"],
+    "expected_keywords": ["杂波", "目标", "检测", "回波"]
+  },
+  {
+    "id": "phased_array",
+    "question": "相控阵天线的基本特点是什么？",
+    "expected_sources": ["第6讲 天线及相控阵技术.pdf"],
+    "expected_keywords": ["相控阵", "天线", "波束", "扫描"]
+  },
+  {
+    "id": "follow_up_radar_equation",
+    "question": "它有哪些影响因素？",
+    "history": [
+      {
+        "role": "user",
+        "content": "雷达方程是什么？"
+      },
+      {
+        "role": "assistant",
+        "content": "雷达方程用于描述雷达系统中发射功率、传播距离、目标散射特性和接收回波功率之间的关系。"
+      }
+    ],
+    "expected_sources": ["第1讲 原理组成、历史方程.pdf"],
+    "expected_keywords": ["发射功率", "天线", "距离", "目标"]
+  }
+]

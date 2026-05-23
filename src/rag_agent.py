@@ -10,9 +10,20 @@ from src.zhipu_llm import DEFAULT_SYSTEM_PROMPT, MAX_HISTORY_MESSAGES
 
 class RAGAgent:
     MAX_RETRIEVAL_HISTORY_MESSAGES = 4
-    CANDIDATE_CHUNKS = 10
+    CANDIDATE_CHUNKS = 20
     FINAL_CHUNKS = 3
     FOLLOW_UP_MARKERS = ("他", "它", "其", "这个", "那个", "上述", "前面", "刚才")
+    CONTEXT_DEPENDENT_PATTERNS = (
+        "有哪些影响",
+        "有哪些因素",
+        "有什么影响",
+        "为什么",
+        "怎么",
+        "如何",
+        "区别",
+        "联系",
+        "优缺点",
+    )
 
     def __init__(self, retriever):
         self.retriever = retriever
@@ -159,6 +170,9 @@ class RAGAgent:
         return f"{context}\n{question}"
 
     def _rewrite_retrieval_question(self, question: str, history: list[dict] | None) -> str:
+        if not self._should_rewrite_question(question, history):
+            return question
+
         fallback_question = self._resolve_question(question, history)
         return self.query_rewriter.rewrite(
             question=question,
@@ -169,6 +183,23 @@ class RAGAgent:
     @classmethod
     def _is_follow_up(cls, question: str) -> bool:
         return any(marker in question for marker in cls.FOLLOW_UP_MARKERS)
+
+    @classmethod
+    def _should_rewrite_question(cls, question: str, history: list[dict] | None) -> bool:
+        if not history:
+            return False
+
+        stripped_question = question.strip()
+        if not stripped_question:
+            return False
+        if cls._is_follow_up(stripped_question):
+            return True
+
+        # Short elliptical questions often depend on the previous topic.
+        if len(stripped_question) <= 12:
+            return True
+
+        return any(pattern in stripped_question for pattern in cls.CONTEXT_DEPENDENT_PATTERNS)
 
     @staticmethod
     def _build_chain():
