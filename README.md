@@ -56,6 +56,8 @@ python web_app.py
 http://127.0.0.1:5001
 ```
 
+网页侧边栏支持上传 `.txt`、`.pdf`、`.docx`、`.pptx` 文件。上传后后端会保存到 `data/`，并自动触发增量索引构建；索引完成后可以直接在页面中提问。
+
 ## 添加知识库文件
 
 后续可以把个人知识库原始文件放入 `data/` 文件夹。
@@ -70,7 +72,13 @@ data/meeting_notes.docx
 data/training_slides.pptx
 ```
 
-如果新增了文件，重新运行 `python build_index.py` 后会重建本地 Chroma 索引。
+如果新增了文件，重新运行 `python build_index.py` 后会更新本地 Chroma 索引。
+
+当前索引构建支持增量更新：程序会在 `vector_store/index_manifest.json` 中记录每个文件的 hash 和文本块 id。再次运行 `python build_index.py` 时，只会处理新增、修改或删除的文件。若需要强制重建整个索引，可以运行：
+
+```bash
+python build_index.py --rebuild
+```
 
 ## 知识库切分策略
 
@@ -81,6 +89,10 @@ data/training_slides.pptx
 ## 检索与精排策略
 
 问答时会先从 Chroma 向量库召回更多候选文本块，再通过轻量级 reranker 进行二阶段精排。reranker 会综合原始向量相似度、问题与正文的词面匹配度，以及问题与文件名/章节标题的匹配度，最后选择最相关的文本块注入 Prompt。
+
+## 多轮问题改写
+
+针对“它、这个、上述、前面”等多轮追问，系统会先调用 LLM 将当前问题改写为适合检索的独立问题，再使用改写后的问题进行向量召回和 reranker 精排。如果改写失败，会自动回退到规则式问题拼接，保证问答流程可用。
 
 ## 项目结构
 
@@ -108,6 +120,7 @@ zxl-agent/
     ├── embedding.py
     ├── retriever.py
     ├── reranker.py
+    ├── query_rewriter.py
     ├── zhipu_llm.py
     └── rag_agent.py
 ```

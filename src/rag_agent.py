@@ -3,6 +3,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from src.langchain_zhipu import ZhipuChatModel
+from src.query_rewriter import LLMQueryRewriter
 from src.reranker import LightweightReranker
 from src.zhipu_llm import DEFAULT_SYSTEM_PROMPT, MAX_HISTORY_MESSAGES
 
@@ -15,6 +16,7 @@ class RAGAgent:
 
     def __init__(self, retriever):
         self.retriever = retriever
+        self.query_rewriter = LLMQueryRewriter()
         self.reranker = LightweightReranker()
         self.chain = self._build_chain()
 
@@ -39,8 +41,8 @@ class RAGAgent:
             }
 
         try:
-            resolved_question = self._resolve_question(question, history)
-            retrieved_chunks = self.retriever.retrieve(resolved_question, top_k=self.CANDIDATE_CHUNKS)
+            retrieval_question = self._rewrite_retrieval_question(question, history)
+            retrieved_chunks = self.retriever.retrieve(retrieval_question, top_k=self.CANDIDATE_CHUNKS)
         except RuntimeError as exc:
             return {"answer": str(exc), "sources": []}
 
@@ -48,7 +50,7 @@ class RAGAgent:
             return {"answer": "我没有在当前知识库中检索到相关内容，可以换个问法试试。", "sources": []}
 
         reranked_chunks = self.reranker.rerank(
-            resolved_question,
+            retrieval_question,
             retrieved_chunks,
             top_k=self.FINAL_CHUNKS,
         )
@@ -57,7 +59,7 @@ class RAGAgent:
             {
                 "chat_history": self._normalize_history(history),
                 "context": context,
-                "question": resolved_question,
+                "question": question,
             }
         )
         return {"answer": answer, "sources": self._format_sources(reranked_chunks)}
@@ -155,6 +157,14 @@ class RAGAgent:
 
         context = "\n".join(recent_user_messages[-cls.MAX_RETRIEVAL_HISTORY_MESSAGES :])
         return f"{context}\n{question}"
+
+    def _rewrite_retrieval_question(self, question: str, history: list[dict] | None) -> str:
+        fallback_question = self._resolve_question(question, history)
+        return self.query_rewriter.rewrite(
+            question=question,
+            history=history,
+            fallback_question=fallback_question,
+        )
 
     @classmethod
     def _is_follow_up(cls, question: str) -> bool:
