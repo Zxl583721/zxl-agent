@@ -13,6 +13,8 @@ CHAPTER_PATTERNS = [
 ]
 
 PAGE_PREFIX_PATTERN = re.compile(r"^第\s*\d+\s*页$")
+MEANINGFUL_TEXT_PATTERN = re.compile(r"[A-Za-z\u4e00-\u9fff]")
+FORMULA_SYMBOL_PATTERN = re.compile(r"[=<>≤≥∑√∆Δ±×÷/\\^_{}[\]|]")
 DEFAULT_CHAPTER = "未识别章节"
 
 
@@ -23,12 +25,41 @@ def detect_chapter_title(line: str) -> str | None:
         return None
     if len(candidate) > 90:
         return None
+    if not is_valid_chapter_title(candidate):
+        return None
 
     for pattern in CHAPTER_PATTERNS:
         if pattern.match(candidate):
             return candidate
 
     return None
+
+
+def is_valid_chapter_title(candidate: str) -> bool:
+    """Filter out PDF formula fragments that accidentally look like headings."""
+    meaningful_chars = MEANINGFUL_TEXT_PATTERN.findall(candidate)
+    if len(meaningful_chars) < 2:
+        return False
+    if re.match(r"^\d{2,}\s+", candidate):
+        return False
+    if re.match(r"^\d+\s+[A-Za-z0-9_]{1,6}$", candidate):
+        return False
+
+    formula_symbols = FORMULA_SYMBOL_PATTERN.findall(candidate)
+    digit_count = sum(char.isdigit() for char in candidate if not char.isspace())
+    if "=" in candidate and digit_count > 0:
+        return False
+    if formula_symbols and len(formula_symbols) >= len(meaningful_chars):
+        return False
+
+    non_space_chars = [char for char in candidate if not char.isspace()]
+    if not non_space_chars:
+        return False
+
+    if digit_count / len(non_space_chars) > 0.65 and len(meaningful_chars) < 4:
+        return False
+
+    return True
 
 
 def group_pages_into_sections(pages: list[dict]) -> list[dict]:
@@ -98,13 +129,15 @@ def split_sections_into_chunks(
         )
         safe_chapter = sanitize_id_part(section["chapter"])
         source_path = Path(section["source"])
+        parent_id = section.get("parent_id") or f"{source_path.name}-{section_index}-{safe_chapter}"
 
         for chunk_index, text in enumerate(text_chunks):
             chunks.append(
                 {
-                    "id": f"{source_path.name}-{section_index}-{safe_chapter}-{chunk_index}",
+                    "id": f"{parent_id}-{chunk_index}",
                     "text": text,
                     "metadata": {
+                        "parent_id": parent_id,
                         "source": section["source"],
                         "filename": section["filename"],
                         "chapter": section["chapter"],

@@ -1,8 +1,11 @@
+import re
+
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from src.langchain_zhipu import ZhipuChatModel
+from src.query_expander import expand_keyword_queries
 from src.query_rewriter import LLMQueryRewriter
 from src.reranker import LightweightReranker
 from src.zhipu_llm import DEFAULT_SYSTEM_PROMPT, MAX_HISTORY_MESSAGES
@@ -13,6 +16,7 @@ class RAGAgent:
     CANDIDATE_CHUNKS = 20
     FINAL_CHUNKS = 3
     FOLLOW_UP_MARKERS = ("他", "它", "其", "这个", "那个", "上述", "前面", "刚才")
+    SOURCE_CITATION_PATTERN = re.compile(r"\[资料\s*(\d+)\]")
     CONTEXT_DEPENDENT_PATTERNS = (
         "有哪些影响",
         "有哪些因素",
@@ -53,7 +57,11 @@ class RAGAgent:
 
         try:
             retrieval_question = self._rewrite_retrieval_question(question, history)
-            retrieved_chunks = self.retriever.retrieve(retrieval_question, top_k=self.CANDIDATE_CHUNKS)
+            retrieved_chunks = self.retriever.retrieve(
+                retrieval_question,
+                top_k=self.CANDIDATE_CHUNKS,
+                keyword_queries=expand_keyword_queries(retrieval_question),
+            )
         except RuntimeError as exc:
             return {"answer": str(exc), "sources": []}
 
@@ -73,7 +81,13 @@ class RAGAgent:
                 "question": question,
             }
         )
-        return {"answer": answer, "sources": self._format_sources(reranked_chunks)}
+        sources = self._format_sources(reranked_chunks)
+        answer = self._ensure_source_citations(answer, sources)
+        return {
+            "answer": answer,
+            "sources": sources,
+            "citation_status": self._citation_status(answer, sources),
+        }
 
     @staticmethod
     def _format_context(chunks: list[dict]) -> str:
@@ -97,7 +111,7 @@ class RAGAgent:
         sources = []
         seen = set()
 
-        for chunk in chunks:
+        for source_index, chunk in enumerate(chunks, start=1):
             metadata = chunk.get("metadata", {})
             source = metadata.get("filename") or metadata.get("source", "unknown")
             chapter = metadata.get("chapter", "未识别章节")
@@ -111,6 +125,7 @@ class RAGAgent:
             seen.add(key)
             sources.append(
                 {
+                    "source_id": source_index,
                     "source": source,
                     "chapter": chapter,
                     "start_page": start_page,
@@ -120,6 +135,51 @@ class RAGAgent:
             )
 
         return sources
+
+    @classmethod
+    def _ensure_source_citations(cls, answer: str, sources: list[dict]) -> str:
+        answer = str(answer).strip()
+        if not answer or not sources or "知识库中没有找到相关信息" in answer:
+            return answer
+
+        status = cls._citation_status(answer, sources)
+        if status["valid_citation_count"] > 0:
+            return answer
+
+        fallback_citations = "、".join(
+            f"[资料 {source['source_id']}]"
+            for source in sources[: cls.FINAL_CHUNKS]
+            if source.get("source_id")
+        )
+        if not fallback_citations:
+            return answer
+
+        return f"{answer}\n\n依据：{fallback_citations}"
+
+    @classmethod
+    def _citation_status(cls, answer: str, sources: list[dict]) -> dict:
+        valid_source_ids = {
+            int(source["source_id"])
+            for source in sources
+            if str(source.get("source_id", "")).isdigit()
+        }
+        cited_source_ids = [
+            int(match)
+            for match in cls.SOURCE_CITATION_PATTERN.findall(str(answer))
+            if match.isdigit()
+        ]
+        valid_cited_source_ids = sorted(
+            source_id
+            for source_id in set(cited_source_ids)
+            if source_id in valid_source_ids
+        )
+
+        return {
+            "has_citation": bool(cited_source_ids),
+            "valid_citation_count": len(valid_cited_source_ids),
+            "cited_source_ids": cited_source_ids,
+            "valid_cited_source_ids": valid_cited_source_ids,
+        }
 
     @staticmethod
     def _normalize_history(history: list[dict] | None) -> list[BaseMessage]:
@@ -212,7 +272,8 @@ class RAGAgent:
                     """请优先根据【知识库资料】回答用户问题。
 如果资料中没有答案，请明确说明“知识库中没有找到相关信息”，不要编造。
 回答中如果引用具体资料，请优先结合资料的来源、章节和页码判断上下文。
-不要在回答正文中编造、改写或额外生成参考来源；参考来源会由系统根据检索结果单独展示。
+回答正文中需要引用资料时，只能使用【知识库资料】里已有的资料编号，例如 [资料 1]、[资料 2]。
+不要在回答正文中编造、改写或额外生成参考来源名称、章节或页码；参考来源会由系统根据检索结果单独展示。
 如果用户问题是追问，请结合历史对话解析“他/它/其/这个”等指代，只回答该指代对象。
 历史对话只用于理解当前问题的指代和上下文，不要复述、总结或回答历史问题。
 最终回答必须聚焦【用户问题】中的当前问题，不要把前几轮的问题或答案混入回答。

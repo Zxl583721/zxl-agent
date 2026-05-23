@@ -3,7 +3,7 @@ import re
 
 from flask import Flask, jsonify, render_template, request
 
-from build_index import DATA_DIR, build_index
+from build_index import DATA_DIR, build_index, discover_knowledge_files, hash_file, load_manifest
 from src.document_loader import SUPPORTED_EXTENSIONS
 from src.rag_agent import RAGAgent
 from src.retriever import ChromaRetriever
@@ -110,6 +110,34 @@ def upload():
     )
 
 
+@app.get("/api/documents")
+def documents():
+    return jsonify({"documents": list_documents()})
+
+
+@app.post("/api/documents/delete")
+def delete_document():
+    global agent
+
+    data = request.get_json(silent=True) or {}
+    filename = sanitize_filename(str(data.get("filename", "")))
+    if not filename:
+        return jsonify({"message": "请选择要删除的文件。"}), 400
+
+    file_path = DATA_DIR / filename
+    if not is_safe_data_file(file_path):
+        return jsonify({"message": "文件路径无效。"}), 400
+    if not file_path.exists():
+        return jsonify({"message": "文件不存在。"}), 404
+
+    file_path.unlink()
+    if not build_index():
+        return jsonify({"message": "文件已删除，但自动更新索引失败。请检查终端日志。"}), 500
+
+    agent = create_agent()
+    return jsonify({"message": f"已删除并更新索引：{filename}。"})
+
+
 def _status_message(has_index: bool, document_count: int) -> str:
     if has_index:
         return f"Chroma 索引已加载，共 {document_count} 个文本块。"
@@ -120,6 +148,55 @@ def sanitize_filename(filename: str) -> str:
     name = Path(filename).name.strip()
     name = re.sub(r"[\\/:*?\"<>|\x00-\x1f]+", "_", name)
     return name.strip(" .")
+
+
+def is_safe_data_file(file_path: Path) -> bool:
+    try:
+        file_path.resolve().relative_to(DATA_DIR.resolve())
+    except ValueError:
+        return False
+    return file_path.suffix.lower() in SUPPORTED_EXTENSIONS
+
+
+def list_documents() -> list[dict]:
+    manifest = load_manifest()
+    indexed_files = manifest.get("files", {})
+    files_by_name = {file_path.name: file_path for file_path in discover_knowledge_files(DATA_DIR)}
+    all_names = sorted(set(files_by_name) | set(indexed_files))
+    documents = []
+
+    for filename in all_names:
+        file_path = files_by_name.get(filename)
+        manifest_entry = indexed_files.get(filename, {})
+        exists = file_path is not None and file_path.exists()
+        current_hash = hash_file(file_path) if exists else ""
+        indexed_hash = manifest_entry.get("hash", "")
+        indexed = bool(manifest_entry)
+
+        documents.append(
+            {
+                "filename": filename,
+                "exists": exists,
+                "indexed": indexed,
+                "status": document_status(exists, indexed, current_hash, indexed_hash),
+                "chunk_count": manifest_entry.get("chunk_count", 0),
+                "hash": current_hash[:12] if current_hash else indexed_hash[:12],
+            }
+        )
+
+    return documents
+
+
+def document_status(exists: bool, indexed: bool, current_hash: str, indexed_hash: str) -> str:
+    if not exists and indexed:
+        return "deleted"
+    if exists and not indexed:
+        return "new"
+    if exists and indexed and current_hash != indexed_hash:
+        return "changed"
+    if exists and indexed:
+        return "indexed"
+    return "unknown"
 
 
 if __name__ == "__main__":

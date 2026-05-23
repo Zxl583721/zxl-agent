@@ -9,6 +9,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.rag_agent import RAGAgent  # noqa: E402
+from src.query_expander import expand_keyword_queries  # noqa: E402
 from src.retriever import ChromaRetriever  # noqa: E402
 
 
@@ -16,9 +17,11 @@ DEFAULT_EVAL_FILE = Path(__file__).with_name("qa_eval.json")
 VECTOR_STORE_DIR = PROJECT_ROOT / "vector_store"
 
 
-def run_eval(eval_file: Path, answer: bool, disable_rewrite: bool) -> int:
+def run_eval(eval_file: Path, answer: bool, disable_rewrite: bool, keyword_only: bool) -> int:
     cases = load_cases(eval_file)
     agent = RAGAgent(ChromaRetriever(VECTOR_STORE_DIR))
+    if keyword_only:
+        agent.retriever.vector_disabled = True
 
     setup_error = getattr(agent.retriever, "setup_error", "")
     if setup_error:
@@ -54,7 +57,12 @@ def evaluate_case(agent: RAGAgent, case: dict, answer: bool, disable_rewrite: bo
         and not disable_rewrite
         and agent._should_rewrite_question(question, history)
     )
-    retrieved_chunks = agent.retriever.retrieve(retrieval_question, top_k=agent.CANDIDATE_CHUNKS)
+    keyword_queries = expand_keyword_queries(retrieval_question)
+    retrieved_chunks = agent.retriever.retrieve(
+        retrieval_question,
+        top_k=agent.CANDIDATE_CHUNKS,
+        keyword_queries=keyword_queries,
+    )
     reranked_chunks = agent.reranker.rerank(
         retrieval_question,
         retrieved_chunks,
@@ -67,6 +75,7 @@ def evaluate_case(agent: RAGAgent, case: dict, answer: bool, disable_rewrite: bo
     answer_sources = []
     answer_source_hit = None
     keyword_coverage = None
+    citation_status = {}
 
     if answer:
         output = agent.answer_with_sources(question, history=history)
@@ -74,11 +83,13 @@ def evaluate_case(agent: RAGAgent, case: dict, answer: bool, disable_rewrite: bo
         answer_sources = output.get("sources", [])
         answer_source_hit = source_hit(answer_sources, expected_sources)
         keyword_coverage = keyword_hit_rate(answer_text, expected_keywords)
+        citation_status = output.get("citation_status", {})
 
     return {
         "id": case.get("id", question),
         "question": question,
         "retrieval_question": retrieval_question,
+        "keyword_queries": keyword_queries,
         "rewrite_triggered": rewrite_triggered,
         "expected_sources": expected_sources,
         "retrieval_sources": retrieval_sources,
@@ -88,6 +99,7 @@ def evaluate_case(agent: RAGAgent, case: dict, answer: bool, disable_rewrite: bo
         "answer_source_hit": answer_source_hit,
         "expected_keywords": expected_keywords,
         "keyword_coverage": keyword_coverage,
+        "citation_status": citation_status,
     }
 
 
@@ -118,6 +130,8 @@ def print_case_result(result: dict, answer: bool) -> None:
     print(f"问题：{result['question']}")
     if result["retrieval_question"] != result["question"]:
         print(f"检索问题：{result['retrieval_question']}")
+    if result.get("keyword_queries"):
+        print(f"关键词扩展：{len(result['keyword_queries'])} 条")
     print(f"触发改写：{'是' if result['rewrite_triggered'] else '否'}")
     print(f"期望来源：{', '.join(result['expected_sources']) or '未设置'}")
     print("检索来源：")
@@ -132,22 +146,32 @@ def print_case_result(result: dict, answer: bool) -> None:
         answer_hit = "PASS" if result["answer_source_hit"] else "FAIL"
         print(f"回答来源命中：{answer_hit}")
         print(f"关键词覆盖率：{result['keyword_coverage']:.2%}")
+        citation_status = result.get("citation_status", {})
+        print(f"有效引用数：{citation_status.get('valid_citation_count', 0)}")
 
 
 def print_summary(results: list[dict], answer: bool) -> None:
     total = len(results)
     retrieval_hits = sum(1 for result in results if result["retrieval_source_hit"])
     rewrite_count = sum(1 for result in results if result["rewrite_triggered"])
+    expanded_count = sum(1 for result in results if result.get("keyword_queries"))
     print("\n评估汇总")
     print(f"- 用例数：{total}")
     print(f"- 检索来源命中率：{safe_rate(retrieval_hits, total):.2%}")
     print(f"- Query Rewrite 触发次数：{rewrite_count}")
+    print(f"- 关键词扩展触发次数：{expanded_count}")
 
     if answer:
         answer_hits = sum(1 for result in results if result["answer_source_hit"])
         avg_keyword_coverage = sum(result["keyword_coverage"] for result in results) / total if total else 0.0
+        cited_answers = sum(
+            1
+            for result in results
+            if result.get("citation_status", {}).get("valid_citation_count", 0) > 0
+        )
         print(f"- 回答来源命中率：{safe_rate(answer_hits, total):.2%}")
         print(f"- 平均关键词覆盖率：{avg_keyword_coverage:.2%}")
+        print(f"- 回答有效引用率：{safe_rate(cited_answers, total):.2%}")
 
 
 def safe_rate(count: int, total: int) -> float:
@@ -166,6 +190,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--eval-file", type=Path, default=DEFAULT_EVAL_FILE, help="评估集 JSON 文件。")
     parser.add_argument("--answer", action="store_true", help="同时调用大模型生成回答并评估关键词覆盖。")
     parser.add_argument("--disable-rewrite", action="store_true", help="关闭 LLM 查询改写，仅使用规则式检索问题。")
+    parser.add_argument("--keyword-only", action="store_true", help="评估时跳过向量检索，仅使用本地 BM25 关键词检索。")
     return parser.parse_args()
 
 
@@ -176,5 +201,6 @@ if __name__ == "__main__":
             eval_file=args.eval_file,
             answer=args.answer,
             disable_rewrite=args.disable_rewrite,
+            keyword_only=args.keyword_only,
         )
     )

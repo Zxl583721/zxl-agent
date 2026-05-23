@@ -9,21 +9,23 @@ from langchain_core.documents import Document
 from src.document_loader import SUPPORTED_EXTENSIONS, clean_text, load_document_pages, load_file_pages
 from src.langchain_zhipu import ZhipuEmbeddings
 from src.retriever import COLLECTION_NAME
-from src.section_splitter import group_pages_into_sections, split_sections_into_chunks
+from src.section_splitter import group_pages_into_sections, sanitize_id_part, split_sections_into_chunks
 
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 VECTOR_STORE_DIR = BASE_DIR / "vector_store"
 MANIFEST_PATH = VECTOR_STORE_DIR / "index_manifest.json"
+PARENT_STORE_PATH = VECTOR_STORE_DIR / "parent_store.json"
 EMBEDDING_MODEL = "embedding-3"
+INDEX_VERSION = 2
 T = TypeVar("T")
 
 
 def build_documents(chunk_size: int, chunk_overlap: int) -> list[Document]:
     """Load local documents and split them into chapter-aware LangChain documents."""
     pages = load_document_pages(DATA_DIR)
-    sections = group_pages_into_sections(pages)
+    sections = attach_parent_ids(group_pages_into_sections(pages))
     chunks = split_sections_into_chunks(
         sections,
         chunk_size=chunk_size,
@@ -46,7 +48,7 @@ def build_documents_for_file(
     file_path: Path,
     chunk_size: int,
     chunk_overlap: int,
-) -> list[Document]:
+) -> tuple[list[Document], dict[str, dict]]:
     """Load one file and split it into chapter-aware LangChain documents."""
     pages = []
     for page in load_file_pages(file_path):
@@ -61,14 +63,15 @@ def build_documents_for_file(
                 }
             )
 
-    sections = group_pages_into_sections(pages)
+    sections = attach_parent_ids(group_pages_into_sections(pages))
+    parents = build_parent_entries(sections)
     chunks = split_sections_into_chunks(
         sections,
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
     )
 
-    return [
+    documents = [
         Document(
             page_content=chunk["text"],
             metadata={
@@ -78,6 +81,7 @@ def build_documents_for_file(
         )
         for chunk in chunks
     ]
+    return documents, parents
 
 
 def build_chunks(chunk_size: int, chunk_overlap: int) -> list[dict]:
@@ -97,6 +101,41 @@ def build_chunks(chunk_size: int, chunk_overlap: int) -> list[dict]:
 def batch_items(items: list[T], batch_size: int) -> list[list[T]]:
     """Split a list into small batches for embedding API calls."""
     return [items[start : start + batch_size] for start in range(0, len(items), batch_size)]
+
+
+def attach_parent_ids(sections: list[dict]) -> list[dict]:
+    """Attach stable parent ids to section-level contexts."""
+    sections_with_ids = []
+    for section_index, section in enumerate(sections):
+        source_path = Path(section["source"])
+        safe_chapter = sanitize_id_part(section["chapter"])
+        sections_with_ids.append(
+            {
+                **section,
+                "section_index": section_index,
+                "parent_id": f"{source_path.name}-{section_index}-{safe_chapter}",
+            }
+        )
+    return sections_with_ids
+
+
+def build_parent_entries(sections: list[dict]) -> dict[str, dict]:
+    parents = {}
+    for section in sections:
+        parent_id = section["parent_id"]
+        parents[parent_id] = {
+            "text": section["content"],
+            "metadata": {
+                "parent_id": parent_id,
+                "source": section["source"],
+                "filename": section["filename"],
+                "chapter": section["chapter"],
+                "start_page": section["start_page"] or "",
+                "end_page": section["end_page"] or "",
+                "section_index": section["section_index"],
+            },
+        }
+    return parents
 
 
 def get_chroma_vectorstore(rebuild: bool = False):
@@ -127,8 +166,8 @@ def get_chroma_vectorstore(rebuild: bool = False):
 
 
 def build_index(
-    chunk_size: int = 800,
-    chunk_overlap: int = 100,
+    chunk_size: int = 400,
+    chunk_overlap: int = 80,
     batch_size: int = 16,
     rebuild: bool = False,
 ) -> bool:
@@ -150,11 +189,15 @@ def build_index(
 
     if not has_manifest:
         rebuild = True
+    if manifest.get("files") and not PARENT_STORE_PATH.exists():
+        rebuild = True
+        manifest = empty_manifest(chunk_size, chunk_overlap)
     if should_rebuild_manifest(manifest, chunk_size, chunk_overlap):
         rebuild = True
         manifest = empty_manifest(chunk_size, chunk_overlap)
     elif rebuild:
         manifest = empty_manifest(chunk_size, chunk_overlap)
+    parent_store = empty_parent_store() if rebuild else load_parent_store()
 
     try:
         vectorstore = get_chroma_vectorstore(rebuild=rebuild)
@@ -167,8 +210,10 @@ def build_index(
     deleted_file_keys = sorted(previous_file_keys - current_file_keys)
 
     for file_key in deleted_file_keys:
-        chunk_ids = manifest["files"].get(file_key, {}).get("chunk_ids", [])
+        file_entry = manifest["files"].get(file_key, {})
+        chunk_ids = file_entry.get("chunk_ids", [])
         delete_documents(vectorstore, chunk_ids)
+        remove_parent_entries(parent_store, file_entry.get("parent_ids", []))
         manifest["files"].pop(file_key, None)
         print(f"已从索引删除失效文件：{file_key}，移除 {len(chunk_ids)} 个文本块。")
 
@@ -196,9 +241,10 @@ def build_index(
     for file_path, file_key, file_hash, previous in changed_files:
         if previous:
             delete_documents(vectorstore, previous.get("chunk_ids", []))
+            remove_parent_entries(parent_store, previous.get("parent_ids", []))
 
         try:
-            documents = build_documents_for_file(
+            documents, parents = build_documents_for_file(
                 file_path,
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,
@@ -216,12 +262,16 @@ def build_index(
         if not add_documents(vectorstore, documents, batch_size):
             return False
 
+        parent_store["parents"].update(parents)
+
         manifest["files"][file_key] = {
             "hash": file_hash,
             "chunk_ids": [document.metadata["id"] for document in documents],
+            "parent_ids": list(parents),
             "chunk_count": len(documents),
         }
 
+    save_parent_store(parent_store)
     save_manifest(manifest, chunk_size, chunk_overlap)
     print(f"Chroma 索引增量更新完成：{VECTOR_STORE_DIR}")
     return True
@@ -287,8 +337,38 @@ def load_manifest() -> dict:
         return empty_manifest()
 
 
+def load_parent_store() -> dict:
+    if not PARENT_STORE_PATH.exists():
+        return empty_parent_store()
+    try:
+        return json.loads(PARENT_STORE_PATH.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return empty_parent_store()
+
+
+def save_parent_store(parent_store: dict) -> None:
+    VECTOR_STORE_DIR.mkdir(parents=True, exist_ok=True)
+    PARENT_STORE_PATH.write_text(
+        json.dumps(parent_store, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+
+def empty_parent_store() -> dict:
+    return {
+        "index_version": INDEX_VERSION,
+        "parents": {},
+    }
+
+
+def remove_parent_entries(parent_store: dict, parent_ids: list[str]) -> None:
+    for parent_id in parent_ids:
+        parent_store.get("parents", {}).pop(parent_id, None)
+
+
 def save_manifest(manifest: dict, chunk_size: int, chunk_overlap: int) -> None:
     VECTOR_STORE_DIR.mkdir(parents=True, exist_ok=True)
+    manifest["index_version"] = INDEX_VERSION
     manifest["chunk_size"] = chunk_size
     manifest["chunk_overlap"] = chunk_overlap
     manifest["embedding_model"] = EMBEDDING_MODEL
@@ -300,6 +380,7 @@ def save_manifest(manifest: dict, chunk_size: int, chunk_overlap: int) -> None:
 
 def empty_manifest(chunk_size: int | None = None, chunk_overlap: int | None = None) -> dict:
     return {
+        "index_version": INDEX_VERSION,
         "chunk_size": chunk_size,
         "chunk_overlap": chunk_overlap,
         "embedding_model": EMBEDDING_MODEL,
@@ -308,6 +389,10 @@ def empty_manifest(chunk_size: int | None = None, chunk_overlap: int | None = No
 
 
 def should_rebuild_manifest(manifest: dict, chunk_size: int, chunk_overlap: int) -> bool:
+    if manifest.get("index_version") not in {None, INDEX_VERSION}:
+        return True
+    if manifest.get("index_version") is None and manifest.get("files"):
+        return True
     has_settings = manifest.get("chunk_size") is not None and manifest.get("chunk_overlap") is not None
     if not has_settings and manifest.get("files"):
         return True
@@ -320,8 +405,8 @@ def should_rebuild_manifest(manifest: dict, chunk_size: int, chunk_overlap: int)
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="构建本地 RAG 知识库向量索引。")
-    parser.add_argument("--chunk-size", type=int, default=800, help="每个文本块的最大字符数。")
-    parser.add_argument("--chunk-overlap", type=int, default=100, help="相邻文本块的重叠字符数。")
+    parser.add_argument("--chunk-size", type=int, default=400, help="用于检索的 child 文本块最大字符数。")
+    parser.add_argument("--chunk-overlap", type=int, default=80, help="相邻 child 文本块的重叠字符数。")
     parser.add_argument("--batch-size", type=int, default=16, help="每次调用 embedding API 的文本数量。")
     parser.add_argument("--rebuild", action="store_true", help="忽略增量记录，重建整个 Chroma 索引。")
     return parser.parse_args()

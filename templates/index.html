@@ -121,6 +121,90 @@
       line-height: 1.5;
     }
 
+    .documents {
+      margin-top: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 16px;
+    }
+
+    .documents-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .documents-title {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .refresh-button {
+      height: 28px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      padding: 0 10px;
+      font-size: 13px;
+    }
+
+    .refresh-button:hover {
+      background: #f3f4f6;
+    }
+
+    .document-list {
+      display: grid;
+      gap: 8px;
+      max-height: 260px;
+      overflow-y: auto;
+    }
+
+    .document-item {
+      border-top: 1px solid var(--line);
+      padding-top: 8px;
+    }
+
+    .document-name {
+      margin: 0 0 4px;
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
+    }
+
+    .document-meta {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .document-actions {
+      margin-top: 6px;
+    }
+
+    .document-delete {
+      height: 28px;
+      border: 1px solid #fecaca;
+      background: #fff;
+      color: #b91c1c;
+      padding: 0 10px;
+      font-size: 12px;
+    }
+
+    .document-delete:hover {
+      background: #fef2f2;
+    }
+
+    .document-delete:disabled,
+    .refresh-button:disabled {
+      opacity: 0.6;
+    }
+
     .main {
       display: grid;
       grid-template-rows: auto minmax(0, 1fr) auto;
@@ -349,6 +433,15 @@
         <button id="uploadButton" class="upload-button" type="submit">上传入库</button>
         <p id="uploadMessage" class="upload-message">支持 txt、pdf、docx、pptx。</p>
       </form>
+      <section class="documents">
+        <div class="documents-header">
+          <h3 class="documents-title">文档管理</h3>
+          <button id="refreshDocumentsButton" class="refresh-button" type="button">刷新</button>
+        </div>
+        <div id="documentList" class="document-list" aria-live="polite">
+          <p class="document-meta">正在加载文档...</p>
+        </div>
+      </section>
       <p class="tips">
         也可以手动将文件放入 data/ 后运行 python build_index.py 构建或更新 Chroma 索引。
       </p>
@@ -396,8 +489,10 @@
     const input = document.querySelector("#questionInput");
     const button = document.querySelector("#sendButton");
     const uploadButton = document.querySelector("#uploadButton");
+    const refreshDocumentsButton = document.querySelector("#refreshDocumentsButton");
     const statusText = document.querySelector("#statusText");
     const uploadMessage = document.querySelector("#uploadMessage");
+    const documentList = document.querySelector("#documentList");
     const chatHistory = [];
     const maxHistoryMessages = 10;
 
@@ -452,7 +547,8 @@
       sources.forEach((source) => {
         const item = document.createElement("li");
         const pageRange = source.page_range || "未知";
-        item.textContent = `来源：${source.source || "unknown"}；章节：${source.chapter || "未识别章节"}；页码：${pageRange}`;
+        const sourceId = source.source_id ? `资料 ${source.source_id}｜` : "";
+        item.textContent = `${sourceId}来源：${source.source || "unknown"}；章节：${source.chapter || "未识别章节"}；页码：${pageRange}`;
         list.appendChild(item);
       });
 
@@ -471,6 +567,103 @@
       const status = await response.json();
       statusText.textContent = status.message;
       statusText.className = `status-value ${status.ready ? "ready" : "pending"}`;
+    }
+
+    async function loadDocuments() {
+      if (window.location.protocol === "file:") {
+        documentList.innerHTML = "";
+        const message = document.createElement("p");
+        message.className = "document-meta";
+        message.textContent = "请通过本地服务查看文档。";
+        documentList.appendChild(message);
+        return;
+      }
+
+      refreshDocumentsButton.disabled = true;
+      try {
+        const response = await fetch("/api/documents");
+        const data = await response.json();
+        renderDocuments(data.documents || []);
+      } catch (error) {
+        documentList.innerHTML = "";
+        const message = document.createElement("p");
+        message.className = "document-meta";
+        message.textContent = "文档列表加载失败。";
+        documentList.appendChild(message);
+      } finally {
+        refreshDocumentsButton.disabled = false;
+      }
+    }
+
+    function renderDocuments(documents) {
+      documentList.innerHTML = "";
+      if (!documents.length) {
+        const empty = document.createElement("p");
+        empty.className = "document-meta";
+        empty.textContent = "暂无已上传文档。";
+        documentList.appendChild(empty);
+        return;
+      }
+
+      documents.forEach((documentInfo) => {
+        const item = document.createElement("article");
+        item.className = "document-item";
+
+        const name = document.createElement("p");
+        name.className = "document-name";
+        name.textContent = documentInfo.filename;
+        item.appendChild(name);
+
+        const meta = document.createElement("p");
+        meta.className = "document-meta";
+        meta.textContent = `状态：${statusLabel(documentInfo.status)}；文本块：${documentInfo.chunk_count || 0}；hash：${documentInfo.hash || "-"}`;
+        item.appendChild(meta);
+
+        if (documentInfo.exists) {
+          const actions = document.createElement("div");
+          actions.className = "document-actions";
+          const deleteButton = document.createElement("button");
+          deleteButton.className = "document-delete";
+          deleteButton.type = "button";
+          deleteButton.textContent = "删除";
+          deleteButton.addEventListener("click", () => deleteDocument(documentInfo.filename));
+          actions.appendChild(deleteButton);
+          item.appendChild(actions);
+        }
+
+        documentList.appendChild(item);
+      });
+    }
+
+    function statusLabel(status) {
+      const labels = {
+        indexed: "已入库",
+        changed: "待更新",
+        new: "未入库",
+        deleted: "已删除待同步",
+      };
+      return labels[status] || "未知";
+    }
+
+    async function deleteDocument(filename) {
+      if (!window.confirm(`确定删除 ${filename} 并更新索引吗？`)) {
+        return;
+      }
+
+      uploadMessage.textContent = "正在删除文件并更新索引。";
+      try {
+        const response = await fetch("/api/documents/delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filename }),
+        });
+        const data = await response.json();
+        uploadMessage.textContent = data.message || "删除完成。";
+        await loadStatus();
+        await loadDocuments();
+      } catch (error) {
+        uploadMessage.textContent = "删除失败，请确认本地服务仍在运行。";
+      }
     }
 
     form.addEventListener("submit", async (event) => {
@@ -546,6 +739,7 @@
         }
         fileInput.value = "";
         await loadStatus();
+        await loadDocuments();
       } catch (error) {
         uploadMessage.textContent = "上传失败，请确认本地服务仍在运行。";
       } finally {
@@ -561,7 +755,10 @@
       }
     });
 
+    refreshDocumentsButton.addEventListener("click", loadDocuments);
+
     loadStatus();
+    loadDocuments();
   </script>
 </body>
 </html>

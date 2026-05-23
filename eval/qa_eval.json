@@ -6,10 +6,34 @@
     "expected_keywords": ["发射功率", "天线", "目标", "距离", "回波"]
   },
   {
-    "id": "noise_detection",
+    "id": "radar_system_components",
+    "question": "雷达系统通常由哪些基本组成部分构成？",
+    "expected_sources": ["第1讲 原理组成、历史方程.pdf"],
+    "expected_keywords": ["天线", "发射", "接收", "信号处理"]
+  },
+  {
+    "id": "radar_history",
+    "question": "雷达技术的发展历史有哪些关键阶段？",
+    "expected_sources": ["第1讲 原理组成、历史方程.pdf"],
+    "expected_keywords": ["雷达", "历史", "发展", "应用"]
+  },
+  {
+    "id": "noise_detection_threshold",
     "question": "噪声中的信号检测为什么需要设置检测门限？",
     "expected_sources": ["第2讲  噪声中的信号检测.pdf"],
     "expected_keywords": ["噪声", "门限", "虚警", "检测"]
+  },
+  {
+    "id": "false_alarm_detection",
+    "question": "虚警概率和检测概率在雷达信号检测中有什么作用？",
+    "expected_sources": ["第2讲  噪声中的信号检测.pdf"],
+    "expected_keywords": ["虚警", "检测概率", "门限", "信号"]
+  },
+  {
+    "id": "coherent_integration",
+    "question": "相参积累为什么能改善噪声中的信号检测效果？",
+    "expected_sources": ["第2讲  噪声中的信号检测.pdf"],
+    "expected_keywords": ["相参", "积累", "信噪比", "检测"]
   },
   {
     "id": "range_velocity_angle_accuracy",
@@ -18,16 +42,130 @@
     "expected_keywords": ["测距", "测速", "测角", "精度"]
   },
   {
-    "id": "clutter_theory",
+    "id": "range_measurement",
+    "question": "雷达测距的基本原理是什么？",
+    "expected_sources": ["第3讲 测距测速测角精度理论.pdf"],
+    "expected_keywords": ["测距", "时间", "距离", "回波"]
+  },
+  {
+    "id": "velocity_measurement",
+    "question": "雷达测速通常利用什么物理效应？",
+    "expected_sources": ["第3讲 测距测速测角精度理论.pdf"],
+    "expected_keywords": ["测速", "多普勒", "频率", "速度"]
+  },
+  {
+    "id": "angle_measurement",
+    "question": "雷达测角有哪些常见方法？",
+    "expected_sources": ["第3讲 测距测速测角精度理论.pdf"],
+    "expected_keywords": ["测角", "波束", "角度", "天线"]
+  },
+  {
+    "id": "clutter_detection_effect",
     "question": "雷达杂波会对目标检测产生什么影响？",
     "expected_sources": ["第4讲 雷达杂波理论.pdf"],
     "expected_keywords": ["杂波", "目标", "检测", "回波"]
   },
   {
-    "id": "phased_array",
+    "id": "surface_clutter",
+    "question": "表面杂波雷达方程主要用于描述什么问题？",
+    "expected_sources": ["第4讲 雷达杂波理论.pdf"],
+    "expected_keywords": ["表面杂波", "雷达方程", "散射", "回波"]
+  },
+  {
+    "id": "sea_clutter",
+    "question": "海杂波的影响因素有哪些？",
+    "expected_sources": ["第4讲 雷达杂波理论.pdf"],
+    "expected_keywords": ["海杂波", "海况", "掠射角", "影响"]
+  },
+  {
+    "id": "propagation_loss",
+    "question": "雷达波传播损耗主要包括哪些影响？",
+    "expected_sources": ["第5讲 传播及损耗.pdf"],
+    "expected_keywords": ["传播", "损耗", "大气", "衰减"]
+  },
+  {
+    "id": "atmospheric_refraction",
+    "question": "大气折射会怎样影响雷达波传播？",
+    "expected_sources": ["第5讲 传播及损耗.pdf"],
+    "expected_keywords": ["大气", "折射", "传播", "路径"]
+  },
+  {
+    "id": "waveguide_propagation",
+    "question": "什么是雷达传播中的波导效应？",
+    "expected_sources": ["第5讲 传播及损耗.pdf"],
+    "expected_keywords": ["波导", "传播", "大气", "雷达"]
+  },
+  {
+    "id": "antenna_basic_indicators",
+    "question": "天线的主要性能指标有哪些？",
+    "expected_sources": ["第6讲 天线及相控阵技术.pdf"],
+    "expected_keywords": ["天线", "增益", "方向图", "波束"]
+  },
+  {
+    "id": "phased_array_basic",
     "question": "相控阵天线的基本特点是什么？",
     "expected_sources": ["第6讲 天线及相控阵技术.pdf"],
     "expected_keywords": ["相控阵", "天线", "波束", "扫描"]
+  },
+  {
+    "id": "antenna_array",
+    "question": "天线阵列的主要技术指标有哪些？",
+    "expected_sources": ["第6讲 天线及相控阵技术.pdf"],
+    "expected_keywords": ["天线阵列", "波束", "方向图", "指标"]
+  },
+  {
+    "id": "transmitter_receiver",
+    "question": "雷达发射和接收技术分别关注哪些核心问题？",
+    "expected_sources": ["第7讲 发射和接收技术.pdf"],
+    "expected_keywords": ["发射", "接收", "功率", "动态范围"]
+  },
+  {
+    "id": "dynamic_range",
+    "question": "雷达接收机动态范围为什么重要？",
+    "expected_sources": ["第7讲 发射和接收技术.pdf"],
+    "expected_keywords": ["接收机", "动态范围", "信号", "噪声"]
+  },
+  {
+    "id": "radar_test_purpose",
+    "question": "雷达试验的主要目的是什么？",
+    "expected_sources": ["第8讲 雷达试验技术.pdf"],
+    "expected_keywords": ["试验", "测试", "雷达", "性能"]
+  },
+  {
+    "id": "tracking_radar_test",
+    "question": "测量雷达和跟踪雷达在试验中有什么关注点？",
+    "expected_sources": ["第8讲 雷达试验技术.pdf"],
+    "expected_keywords": ["测量雷达", "跟踪雷达", "试验", "精度"]
+  },
+  {
+    "id": "radar_countermeasure_jamming",
+    "question": "干扰信号会怎样影响雷达系统？",
+    "expected_sources": ["第9讲 对抗技术.pdf"],
+    "expected_keywords": ["干扰", "雷达", "对抗", "信号"]
+  },
+  {
+    "id": "radar_countermeasure_strategy",
+    "question": "雷达对抗技术通常关注哪些应对策略？",
+    "expected_sources": ["第9讲 对抗技术.pdf"],
+    "expected_keywords": ["对抗", "干扰", "策略", "雷达"]
+  },
+  {
+    "id": "course_arrangement",
+    "question": "这门课程的课程安排和参考要求在哪里说明？",
+    "expected_sources": ["前言 课程安排、参考及要求.pdf"],
+    "expected_keywords": ["课程", "安排", "参考", "要求"]
+  },
+  {
+    "id": "signal_basic_concept",
+    "question": "信号与系统中信号的基本概念是什么？",
+    "expected_sources": ["xinhao1.txt"],
+    "expected_keywords": ["信号", "时间", "函数", "信息"]
+  },
+  {
+    "id": "continuous_time_signal",
+    "question": "连续时间信号通常如何表示？",
+    "expected_sources": ["xinhao1.txt"],
+    "expected_keywords": ["连续时间", "信号", "x(t)", "时间"]
   },
   {
     "id": "follow_up_radar_equation",
@@ -44,5 +182,21 @@
     ],
     "expected_sources": ["第1讲 原理组成、历史方程.pdf"],
     "expected_keywords": ["发射功率", "天线", "距离", "目标"]
+  },
+  {
+    "id": "follow_up_clutter",
+    "question": "它会怎么影响检测？",
+    "history": [
+      {
+        "role": "user",
+        "content": "雷达杂波是什么？"
+      },
+      {
+        "role": "assistant",
+        "content": "雷达杂波是由地物、海面等非目标散射体形成的回波。"
+      }
+    ],
+    "expected_sources": ["第4讲 雷达杂波理论.pdf"],
+    "expected_keywords": ["杂波", "检测", "目标", "回波"]
   }
 ]
