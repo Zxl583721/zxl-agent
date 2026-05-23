@@ -78,6 +78,10 @@ data/training_slides.pptx
 
 每个文本块会写入来源文件、章节标题、起止页码、章节序号和块序号等 metadata，便于检索结果在回答时展示来源、章节和页码。
 
+## 检索与精排策略
+
+问答时会先从 Chroma 向量库召回更多候选文本块，再通过轻量级 reranker 进行二阶段精排。reranker 会综合原始向量相似度、问题与正文的词面匹配度，以及问题与文件名/章节标题的匹配度，最后选择最相关的文本块注入 Prompt。
+
 ## 项目结构
 
 ```text
@@ -103,6 +107,7 @@ zxl-agent/
     ├── text_splitter.py
     ├── embedding.py
     ├── retriever.py
+    ├── reranker.py
     ├── zhipu_llm.py
     └── rag_agent.py
 ```

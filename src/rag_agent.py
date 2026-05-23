@@ -3,15 +3,19 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from src.langchain_zhipu import ZhipuChatModel
+from src.reranker import LightweightReranker
 from src.zhipu_llm import DEFAULT_SYSTEM_PROMPT, MAX_HISTORY_MESSAGES
 
 
 class RAGAgent:
     MAX_RETRIEVAL_HISTORY_MESSAGES = 4
+    CANDIDATE_CHUNKS = 10
+    FINAL_CHUNKS = 3
     FOLLOW_UP_MARKERS = ("他", "它", "其", "这个", "那个", "上述", "前面", "刚才")
 
     def __init__(self, retriever):
         self.retriever = retriever
+        self.reranker = LightweightReranker()
         self.chain = self._build_chain()
 
     def has_knowledge_base(self) -> bool:
@@ -36,14 +40,19 @@ class RAGAgent:
 
         try:
             resolved_question = self._resolve_question(question, history)
-            retrieved_chunks = self.retriever.retrieve(resolved_question, top_k=3)
+            retrieved_chunks = self.retriever.retrieve(resolved_question, top_k=self.CANDIDATE_CHUNKS)
         except RuntimeError as exc:
             return {"answer": str(exc), "sources": []}
 
         if not retrieved_chunks:
             return {"answer": "我没有在当前知识库中检索到相关内容，可以换个问法试试。", "sources": []}
 
-        context = self._format_context(retrieved_chunks)
+        reranked_chunks = self.reranker.rerank(
+            resolved_question,
+            retrieved_chunks,
+            top_k=self.FINAL_CHUNKS,
+        )
+        context = self._format_context(reranked_chunks)
         answer = self.chain.invoke(
             {
                 "chat_history": self._normalize_history(history),
@@ -51,7 +60,7 @@ class RAGAgent:
                 "question": resolved_question,
             }
         )
-        return {"answer": answer, "sources": self._format_sources(retrieved_chunks)}
+        return {"answer": answer, "sources": self._format_sources(reranked_chunks)}
 
     @staticmethod
     def _format_context(chunks: list[dict]) -> str:
