@@ -347,6 +347,40 @@
       padding: 16px 24px;
     }
 
+    .mode-switch {
+      display: flex;
+      gap: 8px;
+      max-width: 980px;
+      margin: 0 auto 12px;
+    }
+
+    .mode-option {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      min-height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--muted);
+      padding: 0 12px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .mode-option input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .mode-option:has(input:checked) {
+      border-color: rgba(37, 99, 235, 0.45);
+      background: #e9f1ff;
+      color: var(--accent-dark);
+    }
+
     .composer-form {
       display: grid;
       grid-template-columns: minmax(0, 1fr) 92px;
@@ -413,6 +447,15 @@
         grid-template-columns: 1fr;
       }
 
+      .mode-switch {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .mode-option {
+        justify-content: center;
+      }
+
       button {
         width: 100%;
       }
@@ -450,7 +493,7 @@
     <main class="main">
       <header class="topbar">
         <h1>个人知识库问答</h1>
-        <p>基于本地 Chroma 检索和智谱 AI 生成回答。</p>
+        <p>基于本地 Chroma 检索和配置的大模型生成回答。</p>
       </header>
 
       <section id="messages" class="messages">
@@ -458,6 +501,16 @@
       </section>
 
       <footer class="composer">
+        <div class="mode-switch" role="radiogroup" aria-label="回答模式">
+          <label class="mode-option">
+            <input type="radio" name="chatMode" value="knowledge" checked>
+            知识库问答
+          </label>
+          <label class="mode-option">
+            <input type="radio" name="chatMode" value="general">
+            通用聊天
+          </label>
+        </div>
         <form id="chatForm" class="composer-form">
           <textarea id="questionInput" placeholder="输入你的问题..." rows="2" autocomplete="off"></textarea>
           <button id="sendButton" type="submit">发送</button>
@@ -495,6 +548,10 @@
     const documentList = document.querySelector("#documentList");
     const chatHistory = [];
     const maxHistoryMessages = 10;
+
+    function currentChatMode() {
+      return document.querySelector('input[name="chatMode"]:checked')?.value || "knowledge";
+    }
 
     function appendMessage(role, text, sources = []) {
       const node = document.createElement("div");
@@ -689,6 +746,7 @@
           body: JSON.stringify({
             question,
             history: chatHistory.slice(-maxHistoryMessages),
+            mode: currentChatMode(),
           }),
         });
         const data = await response.json();

@@ -51,6 +51,7 @@ def chat():
     data = request.get_json(silent=True) or {}
     question = str(data.get("question", "")).strip()
     history = data.get("history")
+    mode = str(data.get("mode", "knowledge")).strip().lower()
 
     if not question:
         return jsonify({"answer": "请输入一个问题。"}), 400
@@ -58,7 +59,12 @@ def chat():
     if not isinstance(history, list):
         history = []
 
-    result = agent.answer_with_sources(question, history=history)
+    if mode in {"general", "chat"}:
+        result = agent.answer_general(question, history=history)
+    else:
+        result = agent.answer_with_sources(question, history=history)
+        result["mode"] = "knowledge"
+
     return jsonify(result)
 
 
@@ -94,7 +100,7 @@ def upload():
     if not build_index():
         return jsonify(
             {
-                "message": "文件已保存，但自动构建索引失败。请检查依赖、API Key 或终端日志。",
+                "message": "文件已保存，但自动构建索引失败。请检查依赖、本地模型配置或终端日志。",
                 "files": saved_files,
                 "rejected_files": rejected_files,
             }

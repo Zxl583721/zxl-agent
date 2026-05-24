@@ -7,7 +7,7 @@ from typing import TypeVar
 from langchain_core.documents import Document
 
 from src.document_loader import SUPPORTED_EXTENSIONS, clean_text, load_document_pages, load_file_pages
-from src.langchain_zhipu import ZhipuEmbeddings
+from src.model_provider import configured_embedding_model_name, get_embeddings
 from src.retriever import COLLECTION_NAME
 from src.section_splitter import group_pages_into_sections, sanitize_id_part, split_sections_into_chunks
 
@@ -17,7 +17,7 @@ DATA_DIR = BASE_DIR / "data"
 VECTOR_STORE_DIR = BASE_DIR / "vector_store"
 MANIFEST_PATH = VECTOR_STORE_DIR / "index_manifest.json"
 PARENT_STORE_PATH = VECTOR_STORE_DIR / "parent_store.json"
-EMBEDDING_MODEL = "embedding-3"
+EMBEDDING_MODEL = configured_embedding_model_name()
 INDEX_VERSION = 2
 T = TypeVar("T")
 
@@ -158,7 +158,7 @@ def get_chroma_vectorstore(rebuild: bool = False):
     return Chroma(
         client=client,
         collection_name=COLLECTION_NAME,
-        embedding_function=ZhipuEmbeddings(),
+        embedding_function=get_embeddings(),
         collection_metadata={
             "embedding_model": EMBEDDING_MODEL,
         },
@@ -287,7 +287,7 @@ def add_documents(vectorstore, documents: list[Document], batch_size: int) -> bo
             )
         except RuntimeError as exc:
             print(f"向量化失败：{exc}")
-            print("请确认已经安装依赖，并在 .env 中配置 ZHIPUAI_API_KEY。")
+            print("请确认本地 Ollama 服务已启动，或在 .env 中配置正确的模型供应商。")
             return False
         except UnicodeEncodeError as exc:
             print(f"向量化失败：知识库文本中包含无法编码的特殊字符，已停止写入。错误：{exc}")

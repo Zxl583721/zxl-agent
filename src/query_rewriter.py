@@ -1,7 +1,7 @@
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 
-from src.langchain_zhipu import ZhipuChatModel
+from src.model_provider import get_chat_model
 from src.zhipu_llm import MAX_HISTORY_MESSAGES
 
 
@@ -13,6 +13,8 @@ class LLMQueryRewriter:
         "未安装",
         "调用智谱 AI 接口失败",
         "智谱 AI 返回",
+        "调用本地 Ollama 接口失败",
+        "Ollama 返回",
     )
 
     def __init__(self):
@@ -102,4 +104,4 @@ class LLMQueryRewriter:
                 ),
             ]
         )
-        return prompt | ZhipuChatModel(temperature=0.1, max_tokens=256) | StrOutputParser()
+        return prompt | get_chat_model(temperature=0.1, max_tokens=256) | StrOutputParser()

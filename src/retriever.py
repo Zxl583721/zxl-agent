@@ -4,7 +4,7 @@ import math
 from pathlib import Path
 import re
 
-from src.langchain_zhipu import ZhipuEmbeddings
+from src.model_provider import get_embeddings
 
 
 TOKEN_PATTERN = re.compile(r"[\w\u4e00-\u9fff]+")
@@ -98,7 +98,7 @@ class ChromaRetriever:
         try:
             self.vectorstore = Chroma(
                 collection_name=self.collection_name,
-                embedding_function=ZhipuEmbeddings(),
+                embedding_function=get_embeddings(),
                 persist_directory=str(self.persist_dir),
             )
             self.collection = self.vectorstore._collection

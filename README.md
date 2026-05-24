@@ -1,6 +1,6 @@
 # rag-agent
 
-一个简易的本地 RAG Agent 项目骨架，用于后续接入个人知识库文件，并通过智谱 AI 大模型完成检索增强问答。
+一个简易的本地 RAG Agent 项目骨架，用于接入个人知识库文件，并通过本地 Ollama 模型完成检索增强问答。
 
 当前版本已经预留了上传、加载、切分、向量化、检索和问答的代码结构。因为你还没有上传知识库文件，程序会在没有数据时给出友好提示。
 
@@ -22,10 +22,24 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-然后编辑 `.env`，填入你的智谱 AI API Key：
+默认配置使用本地 Ollama：
 
 ```bash
-ZHIPUAI_API_KEY=your_api_key_here
+LLM_PROVIDER=ollama
+LLM_BASE_URL=http://localhost:11434/v1
+LLM_API_KEY=ollama
+LLM_MODEL=qwen3:8b
+
+EMBEDDING_PROVIDER=ollama
+EMBEDDING_BASE_URL=http://localhost:11434
+EMBEDDING_MODEL=bge-m3
+```
+
+首次运行前请先安装 Ollama 并下载模型：
+
+```bash
+ollama pull qwen3:8b
+ollama pull bge-m3
 ```
 
 ## 运行项目
@@ -149,9 +163,11 @@ zxl-agent/
     ├── section_splitter.py
     ├── text_splitter.py
     ├── embedding.py
+    ├── langchain_ollama.py
     ├── retriever.py
     ├── reranker.py
     ├── query_expander.py
+    ├── model_provider.py
     ├── query_rewriter.py
     ├── zhipu_llm.py
     └── rag_agent.py

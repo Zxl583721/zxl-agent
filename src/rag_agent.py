@@ -4,7 +4,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
-from src.langchain_zhipu import ZhipuChatModel
+from src.model_provider import get_chat_model
 from src.query_expander import expand_keyword_queries
 from src.query_rewriter import LLMQueryRewriter
 from src.reranker import LightweightReranker
@@ -34,12 +34,22 @@ class RAGAgent:
         self.query_rewriter = LLMQueryRewriter()
         self.reranker = LightweightReranker()
         self.chain = self._build_chain()
+        self.general_chain = self._build_general_chain()
 
     def has_knowledge_base(self) -> bool:
         return self.retriever.has_documents()
 
     def answer(self, question: str, history: list[dict] | None = None) -> str:
         return self.answer_with_sources(question, history=history)["answer"]
+
+    def answer_general(self, question: str, history: list[dict] | None = None) -> dict:
+        answer = self.general_chain.invoke(
+            {
+                "chat_history": self._normalize_history(history),
+                "question": question,
+            }
+        )
+        return {"answer": answer, "sources": [], "mode": "general"}
 
     def answer_with_sources(self, question: str, history: list[dict] | None = None) -> dict:
         setup_error = getattr(self.retriever, "setup_error", "")
@@ -290,7 +300,24 @@ class RAGAgent:
                 ),
             ]
         )
-        return prompt | ZhipuChatModel() | StrOutputParser()
+        return prompt | get_chat_model() | StrOutputParser()
+
+    @staticmethod
+    def _build_general_chain():
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    """你是 zxl-agent 项目的中文通用聊天助手。
+你可以根据自身通用知识回答问题，不需要检索知识库。
+如果问题涉及不确定、实时变化或高风险内容，请说明不确定性，并建议用户核验最新或专业信息。
+默认使用中文回答，表达清晰、直接。""",
+                ),
+                MessagesPlaceholder(variable_name="chat_history"),
+                ("user", "{question}"),
+            ]
+        )
+        return prompt | get_chat_model() | StrOutputParser()
 
 
 def _format_page_range(start_page, end_page) -> str:
