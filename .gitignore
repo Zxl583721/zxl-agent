@@ -10,5 +10,6 @@ env/
 # Local vector database/cache files.
 vector_store/*
 !vector_store/.gitkeep
+conversation_store.sqlite3*
 
 .DS_Store

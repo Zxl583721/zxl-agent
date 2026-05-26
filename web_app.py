@@ -4,13 +4,16 @@ import re
 from flask import Flask, jsonify, render_template, request
 
 from build_index import DATA_DIR, build_index, discover_knowledge_files, hash_file, load_manifest
+from src.conversation_store import ConversationStore
 from src.document_loader import SUPPORTED_EXTENSIONS
 from src.rag_agent import RAGAgent
 from src.retriever import ChromaRetriever
+from src.zhipu_llm import MAX_HISTORY_MESSAGES
 
 
 BASE_DIR = Path(__file__).resolve().parent
 VECTOR_STORE_DIR = BASE_DIR / "vector_store"
+CONVERSATION_DB_PATH = BASE_DIR / "conversation_store.sqlite3"
 
 
 def create_agent() -> RAGAgent:
@@ -20,6 +23,7 @@ def create_agent() -> RAGAgent:
 
 app = Flask(__name__)
 agent = create_agent()
+conversation_store = ConversationStore(CONVERSATION_DB_PATH)
 
 
 @app.get("/")
@@ -50,14 +54,13 @@ def status():
 def chat():
     data = request.get_json(silent=True) or {}
     question = str(data.get("question", "")).strip()
-    history = data.get("history")
     mode = str(data.get("mode", "knowledge")).strip().lower()
 
     if not question:
         return jsonify({"answer": "请输入一个问题。"}), 400
 
-    if not isinstance(history, list):
-        history = []
+    conversation_id = conversation_store.get_or_create_conversation(data.get("conversation_id"))
+    history = conversation_store.recent_messages(conversation_id, MAX_HISTORY_MESSAGES)
 
     if mode in {"general", "chat"}:
         result = agent.answer_general(question, history=history)
@@ -65,7 +68,28 @@ def chat():
         result = agent.answer_with_sources(question, history=history)
         result["mode"] = "knowledge"
 
+    answer = str(result.get("answer", "")).strip()
+    conversation_store.add_message(conversation_id, "user", question, mode=result.get("mode", mode))
+    conversation_store.add_message(
+        conversation_id,
+        "assistant",
+        answer,
+        mode=result.get("mode", mode),
+        sources=result.get("sources", []),
+    )
+    result["conversation_id"] = conversation_id
     return jsonify(result)
+
+
+@app.get("/api/conversations/<conversation_id>/messages")
+def conversation_messages(conversation_id: str):
+    conversation_id = conversation_store.get_or_create_conversation(conversation_id)
+    return jsonify(
+        {
+            "conversation_id": conversation_id,
+            "messages": conversation_store.messages(conversation_id),
+        }
+    )
 
 
 @app.post("/api/upload")

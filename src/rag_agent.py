@@ -66,6 +66,7 @@ class RAGAgent:
             }
 
         try:
+            rewrite_triggered = self._should_rewrite_question(question, history)
             retrieval_question = self._rewrite_retrieval_question(question, history)
             retrieved_chunks = self.retriever.retrieve(
                 retrieval_question,
@@ -97,6 +98,8 @@ class RAGAgent:
             "answer": answer,
             "sources": sources,
             "citation_status": self._citation_status(answer, sources),
+            "retrieval_question": retrieval_question,
+            "rewrite_triggered": rewrite_triggered,
         }
 
     @staticmethod

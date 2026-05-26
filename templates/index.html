@@ -546,11 +546,38 @@
     const statusText = document.querySelector("#statusText");
     const uploadMessage = document.querySelector("#uploadMessage");
     const documentList = document.querySelector("#documentList");
-    const chatHistory = [];
-    const maxHistoryMessages = 10;
+    const conversationStorageKey = "zxl-agent-conversation-id";
+    const initialMessageText = "你好，我已经准备好接收问题了。知识库未就绪时，我会提示你先构建索引。";
+    let conversationId = getOrCreateConversationId();
 
     function currentChatMode() {
       return document.querySelector('input[name="chatMode"]:checked')?.value || "knowledge";
+    }
+
+    function getOrCreateConversationId() {
+      const existingId = window.localStorage.getItem(conversationStorageKey);
+      if (existingId) {
+        return existingId;
+      }
+
+      const nextId = window.crypto?.randomUUID
+        ? window.crypto.randomUUID()
+        : `conversation-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      window.localStorage.setItem(conversationStorageKey, nextId);
+      return nextId;
+    }
+
+    function setConversationId(nextId) {
+      if (!nextId || nextId === conversationId) {
+        return;
+      }
+      conversationId = nextId;
+      window.localStorage.setItem(conversationStorageKey, nextId);
+    }
+
+    function resetMessages() {
+      messages.innerHTML = "";
+      appendMessage("agent", initialMessageText);
     }
 
     function appendMessage(role, text, sources = []) {
@@ -624,6 +651,30 @@
       const status = await response.json();
       statusText.textContent = status.message;
       statusText.className = `status-value ${status.ready ? "ready" : "pending"}`;
+    }
+
+    async function loadConversation() {
+      if (window.location.protocol === "file:") {
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/conversations/${encodeURIComponent(conversationId)}/messages`);
+        const data = await response.json();
+        setConversationId(data.conversation_id);
+        const history = Array.isArray(data.messages) ? data.messages : [];
+        if (!history.length) {
+          return;
+        }
+
+        messages.innerHTML = "";
+        history.forEach((message) => {
+          const role = message.role === "user" ? "user" : "agent";
+          appendMessage(role, message.content || "", message.sources || []);
+        });
+      } catch (error) {
+        resetMessages();
+      }
     }
 
     async function loadDocuments() {
@@ -744,18 +795,15 @@
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            conversation_id: conversationId,
             question,
-            history: chatHistory.slice(-maxHistoryMessages),
             mode: currentChatMode(),
           }),
         });
         const data = await response.json();
+        setConversationId(data.conversation_id);
         const answer = data.answer || "没有返回内容。";
         appendMessage("agent", answer, data.sources || []);
-        chatHistory.push(
-          { role: "user", content: question },
-          { role: "assistant", content: answer },
-        );
       } catch (error) {
         appendMessage("agent", "请求失败，请确认本地服务仍在运行。");
       } finally {
@@ -816,6 +864,7 @@
     refreshDocumentsButton.addEventListener("click", loadDocuments);
 
     loadStatus();
+    loadConversation();
     loadDocuments();
   </script>
 </body>
