@@ -1,7 +1,8 @@
 from pathlib import Path
+import json
 import re
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request, stream_with_context
 
 from build_index import DATA_DIR, build_index, discover_knowledge_files, hash_file, load_manifest
 from src.conversation_store import ConversationStore
@@ -79,6 +80,64 @@ def chat():
     )
     result["conversation_id"] = conversation_id
     return jsonify(result)
+
+
+@app.post("/api/chat/stream")
+def chat_stream():
+    data = request.get_json(silent=True) or {}
+    question = str(data.get("question", "")).strip()
+    mode = str(data.get("mode", "knowledge")).strip().lower()
+
+    if not question:
+        return jsonify({"answer": "请输入一个问题。"}), 400
+
+    conversation_id = conversation_store.get_or_create_conversation(data.get("conversation_id"))
+    history = conversation_store.recent_messages(conversation_id, MAX_HISTORY_MESSAGES)
+
+    def generate():
+        answer_parts = []
+        result_metadata = {"mode": mode, "sources": []}
+
+        try:
+            if mode in {"general", "chat"}:
+                stream = agent.stream_general(question, history=history)
+            else:
+                stream = agent.stream_with_sources(question, history=history)
+
+            yield sse("metadata", {"conversation_id": conversation_id})
+            for event in stream:
+                event_type = event.get("type")
+                if event_type == "metadata":
+                    result_metadata.update(event)
+                    yield sse("metadata", {**event, "conversation_id": conversation_id})
+                elif event_type == "token":
+                    token = str(event.get("content", ""))
+                    answer_parts.append(token)
+                    yield sse("token", {"content": token})
+
+            answer = "".join(answer_parts).strip()
+            sources = result_metadata.get("sources", [])
+            if sources:
+                answer_with_citations = agent._ensure_source_citations(answer, sources)
+                citation_suffix = answer_with_citations[len(answer) :]
+                if citation_suffix:
+                    answer_parts.append(citation_suffix)
+                    answer = answer_with_citations
+                    yield sse("token", {"content": citation_suffix})
+
+            conversation_store.add_message(conversation_id, "user", question, mode=result_metadata.get("mode", mode))
+            conversation_store.add_message(
+                conversation_id,
+                "assistant",
+                answer,
+                mode=result_metadata.get("mode", mode),
+                sources=sources,
+            )
+            yield sse("done", {"conversation_id": conversation_id})
+        except Exception as exc:
+            yield sse("error", {"message": f"生成失败：{exc.__class__.__name__}: {exc}"})
+
+    return Response(stream_with_context(generate()), mimetype="text/event-stream")
 
 
 @app.get("/api/conversations/<conversation_id>/messages")
@@ -172,6 +231,10 @@ def _status_message(has_index: bool, document_count: int) -> str:
     if has_index:
         return f"Chroma 索引已加载，共 {document_count} 个文本块。"
     return "还没有可用的 Chroma 索引。请先运行 python build_index.py。"
+
+
+def sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
 def sanitize_filename(filename: str) -> str:

@@ -591,6 +591,7 @@
       }
       messages.appendChild(node);
       messages.scrollTop = messages.scrollHeight;
+      return node;
     }
 
     function renderMarkdownMessage(node, text) {
@@ -791,7 +792,8 @@
       button.textContent = "生成中";
 
       try {
-        const response = await fetch("/api/chat", {
+        const agentNode = appendMessage("agent", "");
+        const response = await fetch("/api/chat/stream", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -800,10 +802,51 @@
             mode: currentChatMode(),
           }),
         });
-        const data = await response.json();
-        setConversationId(data.conversation_id);
-        const answer = data.answer || "没有返回内容。";
-        appendMessage("agent", answer, data.sources || []);
+        if (!response.ok || !response.body) {
+          throw new Error("stream request failed");
+        }
+
+        let answer = "";
+        let streamBuffer = "";
+        let streamedSources = [];
+        const decoder = new TextDecoder();
+        const reader = response.body.getReader();
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) {
+            break;
+          }
+
+          streamBuffer += decoder.decode(value, { stream: true });
+          const events = streamBuffer.split("\n\n");
+          streamBuffer = events.pop() || "";
+
+          for (const rawEvent of events) {
+            const parsedEvent = parseSseEvent(rawEvent);
+            if (!parsedEvent) {
+              continue;
+            }
+            if (parsedEvent.data.conversation_id) {
+              setConversationId(parsedEvent.data.conversation_id);
+            }
+            if (parsedEvent.event === "metadata") {
+              streamedSources = parsedEvent.data.sources || streamedSources;
+            } else if (parsedEvent.event === "token") {
+              answer += parsedEvent.data.content || "";
+              renderMarkdownMessage(agentNode, answer);
+              messages.scrollTop = messages.scrollHeight;
+            } else if (parsedEvent.event === "error") {
+              throw new Error(parsedEvent.data.message || "stream error");
+            }
+          }
+        }
+
+        if (!answer) {
+          answer = "没有返回内容。";
+          renderMarkdownMessage(agentNode, answer);
+        }
+        renderSources(agentNode, streamedSources);
       } catch (error) {
         appendMessage("agent", "请求失败，请确认本地服务仍在运行。");
       } finally {
@@ -853,6 +896,27 @@
         uploadButton.textContent = "上传入库";
       }
     });
+
+    function parseSseEvent(rawEvent) {
+      const lines = rawEvent.split("\n");
+      const eventLine = lines.find((line) => line.startsWith("event:"));
+      const dataLines = lines
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).trimStart());
+
+      if (!eventLine || dataLines.length === 0) {
+        return null;
+      }
+
+      try {
+        return {
+          event: eventLine.slice(6).trim(),
+          data: JSON.parse(dataLines.join("\n")),
+        };
+      } catch (error) {
+        return null;
+      }
+    }
 
     input.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.shiftKey) {

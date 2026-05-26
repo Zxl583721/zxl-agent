@@ -51,6 +51,17 @@ class RAGAgent:
         )
         return {"answer": answer, "sources": [], "mode": "general"}
 
+    def stream_general(self, question: str, history: list[dict] | None = None):
+        yield {"type": "metadata", "sources": [], "mode": "general"}
+        for token in self.general_chain.stream(
+            {
+                "chat_history": self._normalize_history(history),
+                "question": question,
+            }
+        ):
+            if token:
+                yield {"type": "token", "content": str(token)}
+
     def answer_with_sources(self, question: str, history: list[dict] | None = None) -> dict:
         setup_error = getattr(self.retriever, "setup_error", "")
         if setup_error:
@@ -101,6 +112,66 @@ class RAGAgent:
             "retrieval_question": retrieval_question,
             "rewrite_triggered": rewrite_triggered,
         }
+
+    def stream_with_sources(self, question: str, history: list[dict] | None = None):
+        setup_error = getattr(self.retriever, "setup_error", "")
+        if setup_error:
+            yield {"type": "metadata", "sources": [], "mode": "knowledge"}
+            yield {"type": "token", "content": setup_error}
+            return
+
+        if not self.has_knowledge_base():
+            yield {"type": "metadata", "sources": [], "mode": "knowledge"}
+            yield {
+                "type": "token",
+                "content": (
+                    "当前还没有加载到 Chroma 向量索引。请先把 txt、pdf、docx 或 pptx 文件放入 data/ 文件夹，"
+                    "然后运行 python build_index.py 构建索引。"
+                ),
+            }
+            return
+
+        try:
+            rewrite_triggered = self._should_rewrite_question(question, history)
+            retrieval_question = self._rewrite_retrieval_question(question, history)
+            retrieved_chunks = self.retriever.retrieve(
+                retrieval_question,
+                top_k=self.CANDIDATE_CHUNKS,
+                keyword_queries=expand_keyword_queries(retrieval_question),
+            )
+        except RuntimeError as exc:
+            yield {"type": "metadata", "sources": [], "mode": "knowledge"}
+            yield {"type": "token", "content": str(exc)}
+            return
+
+        if not retrieved_chunks:
+            yield {"type": "metadata", "sources": [], "mode": "knowledge"}
+            yield {"type": "token", "content": "我没有在当前知识库中检索到相关内容，可以换个问法试试。"}
+            return
+
+        reranked_chunks = self.reranker.rerank(
+            retrieval_question,
+            retrieved_chunks,
+            top_k=self.FINAL_CHUNKS,
+        )
+        sources = self._format_sources(reranked_chunks)
+        yield {
+            "type": "metadata",
+            "sources": sources,
+            "mode": "knowledge",
+            "retrieval_question": retrieval_question,
+            "rewrite_triggered": rewrite_triggered,
+        }
+
+        for token in self.chain.stream(
+            {
+                "chat_history": self._normalize_history(history),
+                "context": self._format_context(reranked_chunks),
+                "question": question,
+            }
+        ):
+            if token:
+                yield {"type": "token", "content": str(token)}
 
     @staticmethod
     def _format_context(chunks: list[dict]) -> str:

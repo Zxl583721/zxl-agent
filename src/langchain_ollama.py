@@ -7,8 +7,8 @@ from config import EMBEDDING_BASE_URL, EMBEDDING_MODEL, LLM_BASE_URL, LLM_MODEL,
 from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, BaseMessage
-from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
+from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 
 from src.embedding import clean_embedding_text
 from src.zhipu_llm import DEFAULT_SYSTEM_PROMPT
@@ -85,6 +85,37 @@ class OllamaChatModel(BaseChatModel):
 
         return answer or "Ollama 返回了空回答。"
 
+    def _stream(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
+        **kwargs: Any,
+    ):
+        payload = {
+            "model": self.model_name,
+            "messages": self._convert_messages(messages),
+            "stream": True,
+            "think": False,
+            "options": {
+                "temperature": kwargs.get("temperature", self.temperature),
+                "num_predict": kwargs.get("max_tokens", self.max_tokens),
+            },
+        }
+        if stop:
+            payload["options"]["stop"] = stop
+
+        try:
+            for item in _post_json_lines(f"{_ollama_host(LLM_BASE_URL)}/api/chat", payload):
+                token = item.get("message", {}).get("content", "")
+                if not token:
+                    continue
+                if run_manager:
+                    run_manager.on_llm_new_token(token)
+                yield ChatGenerationChunk(message=AIMessageChunk(content=token))
+        except RuntimeError as exc:
+            yield ChatGenerationChunk(message=AIMessageChunk(content=f"调用本地 Ollama 接口失败：{exc}"))
+
     @staticmethod
     def _convert_messages(messages: list[BaseMessage]) -> list[dict]:
         converted = []
@@ -149,6 +180,36 @@ def _post_json(url: str, payload: dict, headers: dict | None = None) -> dict:
         raise RuntimeError(f"请求 {url} 超时") from exc
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"接口返回不是合法 JSON：{exc}") from exc
+
+
+def _post_json_lines(url: str, payload: dict, headers: dict | None = None):
+    request_headers = {
+        "Content-Type": "application/json",
+        **(headers or {}),
+    }
+    request = Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers=request_headers,
+        method="POST",
+    )
+
+    try:
+        with urlopen(request, timeout=OLLAMA_TIMEOUT_SECONDS) as response:
+            for raw_line in response:
+                line = raw_line.decode("utf-8").strip()
+                if not line:
+                    continue
+                yield json.loads(line)
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
+    except URLError as exc:
+        raise RuntimeError(f"无法连接 {url}：{exc.reason}") from exc
+    except TimeoutError as exc:
+        raise RuntimeError(f"请求 {url} 超时") from exc
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"接口返回不是合法 JSON 行：{exc}") from exc
 
 
 def _ollama_host(base_url: str) -> str:
