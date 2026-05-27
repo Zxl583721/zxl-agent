@@ -1,15 +1,16 @@
 import shutil
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi import UploadFile
 
 from app.core.config import get_settings
-from app.models import DocumentStatus, TaskStatus
+from app.models import TaskStatus
 from app.services.persistence_service import persistence_service
-from app.services.rag_service import rag_service
 from app.services.redis_service import redis_service
+from app.tasks.document_tasks import index_document
 from app.utils.files import sanitize_filename
-from build_index import DATA_DIR, build_index, discover_knowledge_files, hash_file, load_manifest
+from build_index import DATA_DIR, discover_knowledge_files, hash_file, load_manifest
 from src.document_loader import SUPPORTED_EXTENSIONS
 
 
@@ -71,22 +72,25 @@ class KnowledgeService:
                 file_size=save_path.stat().st_size,
                 file_hash=file_hash,
             )
+            task_id = uuid4().hex
             task_id = persistence_service.create_task_record(
-                task_type="sync_document_index",
+                task_type="document_index",
                 document_id=document_id,
+                task_id=task_id,
             )
-            if document_id is not None:
-                persistence_service.update_document_status(document_id, DocumentStatus.PROCESSING)
             if task_id:
-                persistence_service.update_task_status(task_id, TaskStatus.PROCESSING)
                 redis_service.set_task_status(
                     task_id,
-                    TaskStatus.PROCESSING.value,
+                    TaskStatus.PENDING.value,
                     {
                         "document_id": document_id,
                         "filename": filename,
-                        "task_type": "sync_document_index",
+                        "task_type": "document_index",
                     },
+                )
+                index_document.apply_async(
+                    args=[task_id, document_id, filename],
+                    task_id=task_id,
                 )
             saved_files.append(filename)
             document_records.append({"filename": filename, "document_id": document_id, "task_id": task_id})
@@ -105,63 +109,10 @@ class KnowledgeService:
                 "task_ids": [],
             }
 
-        if not build_index():
-            for record in document_records:
-                persistence_service.update_document_status(
-                    record["document_id"],
-                    DocumentStatus.FAILED,
-                    error_message="build_index returned False",
-                )
-                persistence_service.update_task_status(
-                    record["task_id"],
-                    TaskStatus.FAILED,
-                    error_message="build_index returned False",
-                )
-                redis_service.set_task_status(
-                    record["task_id"],
-                    TaskStatus.FAILED.value,
-                    {
-                        "document_id": record["document_id"],
-                        "filename": record["filename"],
-                        "error_message": "build_index returned False",
-                    },
-                )
-            return {
-                "ok": False,
-                "status_code": 500,
-                "message": "文件已保存，但自动构建索引失败。请检查依赖、本地模型配置或终端日志。",
-                "files": saved_files,
-                "rejected_files": rejected_files,
-                "document_ids": [record["document_id"] for record in document_records if record["document_id"] is not None],
-                "task_ids": task_ids,
-            }
-
-        manifest = load_manifest()
-        indexed_files = manifest.get("files", {})
-        for record in document_records:
-            chunk_count = indexed_files.get(record["filename"], {}).get("chunk_count", 0)
-            persistence_service.update_document_status(
-                record["document_id"],
-                DocumentStatus.COMPLETED,
-                chunk_count=chunk_count,
-            )
-            persistence_service.update_task_status(record["task_id"], TaskStatus.COMPLETED)
-            redis_service.set_task_status(
-                record["task_id"],
-                TaskStatus.COMPLETED.value,
-                {
-                    "document_id": record["document_id"],
-                    "filename": record["filename"],
-                    "chunk_count": chunk_count,
-                    "task_type": "sync_document_index",
-                },
-            )
-
-        rag_service.reload_agent()
         return {
             "ok": True,
             "status_code": 200,
-            "message": f"已上传并完成索引：{len(saved_files)} 个文件。",
+            "message": f"已上传 {len(saved_files)} 个文件，文档索引任务已进入队列。",
             "files": saved_files,
             "rejected_files": rejected_files,
             "document_ids": [record["document_id"] for record in document_records if record["document_id"] is not None],

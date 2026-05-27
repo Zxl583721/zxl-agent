@@ -126,6 +126,7 @@ class PersistenceService:
         document_id: int | None = None,
         user_id: int | None = None,
         knowledge_base_id: int | None = None,
+        task_id: str | None = None,
     ) -> str | None:
         try:
             with SessionLocal() as db:
@@ -134,7 +135,7 @@ class PersistenceService:
                     user_id=user_id,
                     knowledge_base_id=knowledge_base_id,
                 )
-                task_id = uuid4().hex
+                task_id = task_id or uuid4().hex
                 task = TaskRecord(
                     task_id=task_id,
                     task_type=task_type,
@@ -148,6 +149,27 @@ class PersistenceService:
                 return task_id
         except SQLAlchemyError as exc:
             print(f"数据库写入任务记录失败，已跳过任务元数据：{exc}")
+            return None
+
+    def get_task_record(self, task_id: str) -> dict | None:
+        try:
+            with SessionLocal() as db:
+                task = db.scalar(select(TaskRecord).where(TaskRecord.task_id == task_id))
+                if task is None:
+                    return None
+                return {
+                    "task_id": task.task_id,
+                    "status": task.status,
+                    "task_type": task.task_type,
+                    "document_id": task.document_id,
+                    "user_id": task.user_id,
+                    "knowledge_base_id": task.knowledge_base_id,
+                    "error_message": task.error_message,
+                    "created_at": task.created_at.isoformat() if task.created_at else None,
+                    "updated_at": task.updated_at.isoformat() if task.updated_at else None,
+                }
+        except SQLAlchemyError as exc:
+            print(f"数据库查询任务记录失败，task_id={task_id}：{exc}")
             return None
 
     def update_task_status(

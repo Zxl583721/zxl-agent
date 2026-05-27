@@ -3,9 +3,11 @@ from fastapi import APIRouter, File, HTTPException, Response, UploadFile
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.schemas.health import HealthResponse
 from app.schemas.knowledge import DocumentListResponse, KnowledgeUploadResponse
+from app.schemas.task import TaskStatusResponse
 from app.services.knowledge_service import knowledge_service
 from app.services.rag_service import rag_service
 from app.services.redis_service import redis_service
+from app.services.task_service import task_service
 
 
 router = APIRouter()
@@ -84,3 +86,11 @@ def upload_knowledge(files: list[UploadFile] = File(...)) -> dict:
 @router.get("/api/knowledge/documents", response_model=DocumentListResponse, tags=["knowledge"])
 def list_documents() -> dict:
     return {"documents": knowledge_service.list_documents()}
+
+
+@router.get("/api/tasks/{task_id}", response_model=TaskStatusResponse, tags=["tasks"])
+def get_task(task_id: str) -> dict:
+    result = task_service.get_task_status(task_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="任务不存在。")
+    return result

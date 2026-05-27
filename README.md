@@ -193,6 +193,68 @@ X-Cache: HIT
 
 说明：Redis 不可用时，系统会自动降级，限流放行、缓存跳过，接口仍继续调用本地 RAG 流程。
 
+### Celery 异步文档索引
+
+第四阶段已接入 Celery，使用 Redis 作为 broker 和 result backend。上传文件后，API 不再阻塞等待解析、切分、embedding 和 Chroma 写入完成，而是立即返回 `document_ids` 和 `task_ids`。
+
+异步上传流程：
+
+```text
+保存文件 -> MySQL documents=pending -> MySQL task_records=pending
+-> Redis task_status=pending -> 投递 Celery document_index 任务
+-> worker 更新 processing -> 复用现有 build_index 增量索引
+-> 写入 ChromaDB -> 更新 completed / failed
+```
+
+Celery 环境变量：
+
+```bash
+CELERY_BROKER_URL=redis://127.0.0.1:6379/0
+CELERY_RESULT_BACKEND=redis://127.0.0.1:6379/0
+CELERY_TASK_SERIALIZER=json
+CELERY_RESULT_SERIALIZER=json
+CELERY_ACCEPT_CONTENT=json
+```
+
+启动 API：
+
+```bash
+uvicorn app.main:app --reload --port 8000
+```
+
+启动 worker：
+
+```bash
+celery -A app.tasks.celery_app worker --loglevel=info
+```
+
+上传文档：
+
+```bash
+curl -F "files=@data/my_notes.txt" \
+  http://127.0.0.1:8000/api/knowledge/upload
+```
+
+返回示例：
+
+```json
+{
+  "message": "已上传 1 个文件，文档索引任务已进入队列。",
+  "files": ["my_notes.txt"],
+  "rejected_files": [],
+  "document_ids": [1],
+  "task_ids": ["..."]
+}
+```
+
+查询任务：
+
+```bash
+curl http://127.0.0.1:8000/api/tasks/{task_id}
+```
+
+说明：当前 worker 复用项目已有 `build_index()` 增量索引流程，它会处理新增/变更文件并写入 ChromaDB。后续可以继续细化为单文件级 Chroma 写入和更强的任务并发控制。
+
 ### 旧版 CLI / Flask 入口
 
 如果已经把知识库文件放入 `data/`，可以先构建向量索引：
