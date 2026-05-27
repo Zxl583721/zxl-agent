@@ -28,6 +28,14 @@ class Settings:
     mysql_password = os.getenv("MYSQL_PASSWORD", "zxl_agent")
     mysql_database = os.getenv("MYSQL_DATABASE", "zxl_agent")
     database_echo = os.getenv("DATABASE_ECHO", "false").strip().lower() == "true"
+    redis_host = os.getenv("REDIS_HOST", "127.0.0.1")
+    redis_port = int(os.getenv("REDIS_PORT", "6379"))
+    redis_db = int(os.getenv("REDIS_DB", "0"))
+    redis_password = os.getenv("REDIS_PASSWORD") or None
+    redis_socket_timeout = float(os.getenv("REDIS_SOCKET_TIMEOUT", "1.0"))
+    chat_rate_limit_per_minute = int(os.getenv("CHAT_RATE_LIMIT_PER_MINUTE", "10"))
+    chat_cache_ttl_seconds = int(os.getenv("CHAT_CACHE_TTL_SECONDS", "300"))
+    task_status_cache_ttl_seconds = int(os.getenv("TASK_STATUS_CACHE_TTL_SECONDS", "86400"))
 
     @property
     def database_url(self) -> str:
@@ -38,6 +46,11 @@ class Settings:
             f"mysql+pymysql://{self.mysql_user}:{self.mysql_password}"
             f"@{self.mysql_host}:{self.mysql_port}/{self.mysql_database}?charset=utf8mb4"
         )
+
+    @property
+    def redis_url(self) -> str:
+        auth = f":{self.redis_password}@" if self.redis_password else ""
+        return f"redis://{auth}{self.redis_host}:{self.redis_port}/{self.redis_db}"
 
 
 @lru_cache

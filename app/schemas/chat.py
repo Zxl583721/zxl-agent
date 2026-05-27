@@ -26,6 +26,8 @@ class ChatResponse(BaseModel):
     user_id: int = 1
     knowledge_base_id: int = 1
     mode: str = "knowledge"
+    cache_hit: bool = False
+    cache_key: str | None = None
     sources: list[Source] = Field(default_factory=list)
     citation_status: dict[str, Any] | None = None
     retrieval_question: str | None = None

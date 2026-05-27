@@ -127,6 +127,72 @@ pending -> processing -> completed / failed
 
 说明：如果本地还没有启动 MySQL，FastAPI 应用仍可导入并执行本地 RAG 流程；数据库写入会降级跳过，并在终端输出提示。要完整验证持久化，请先创建 MySQL 数据库并运行初始化脚本。
 
+### Redis 缓存和限流
+
+第三阶段已接入 Redis，用于：
+
+| 功能 | Key 设计 | 默认过期时间 |
+| --- | --- | --- |
+| `/api/chat` 用户限流 | `rate_limit:chat:user:{user_id}` | 60 秒 |
+| 热点问答缓存 | `chat_cache:user:{user_id}:kb:{knowledge_base_id}:q:{question_sha256}` | 300 秒 |
+| 文档处理任务状态缓存 | `task_status:{task_id}` | 86400 秒 |
+
+Redis 环境变量：
+
+```bash
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REDIS_DB=0
+REDIS_PASSWORD=
+REDIS_SOCKET_TIMEOUT=1.0
+CHAT_RATE_LIMIT_PER_MINUTE=10
+CHAT_CACHE_TTL_SECONDS=300
+TASK_STATUS_CACHE_TTL_SECONDS=86400
+```
+
+限流规则：
+
+```text
+同一 user_id 每分钟最多请求 10 次 /api/chat，超过返回 429。
+```
+
+缓存规则：
+
+```text
+同一 user_id + 同一 knowledge_base_id + 同一问题，在 5 分钟内重复提问会优先返回 Redis 缓存答案。
+```
+
+测试限流：
+
+```bash
+for i in {1..12}; do
+  curl -s -o /dev/null -w "%{http_code}\n" \
+    -X POST http://127.0.0.1:8000/api/chat \
+    -H "Content-Type: application/json" \
+    -d '{"question":"Redis 限流测试","user_id":1,"knowledge_base_id":1,"mode":"knowledge"}'
+done
+```
+
+测试缓存：
+
+```bash
+curl -i -X POST http://127.0.0.1:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"question":"Redis 缓存测试","user_id":1,"knowledge_base_id":1,"mode":"knowledge"}'
+
+curl -i -X POST http://127.0.0.1:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"question":"Redis 缓存测试","user_id":1,"knowledge_base_id":1,"mode":"knowledge"}'
+```
+
+第二次响应头应包含：
+
+```text
+X-Cache: HIT
+```
+
+说明：Redis 不可用时，系统会自动降级，限流放行、缓存跳过，接口仍继续调用本地 RAG 流程。
+
 ### 旧版 CLI / Flask 入口
 
 如果已经把知识库文件放入 `data/`，可以先构建向量索引：

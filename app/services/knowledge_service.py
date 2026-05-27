@@ -7,6 +7,7 @@ from app.core.config import get_settings
 from app.models import DocumentStatus, TaskStatus
 from app.services.persistence_service import persistence_service
 from app.services.rag_service import rag_service
+from app.services.redis_service import redis_service
 from app.utils.files import sanitize_filename
 from build_index import DATA_DIR, build_index, discover_knowledge_files, hash_file, load_manifest
 from src.document_loader import SUPPORTED_EXTENSIONS
@@ -78,6 +79,15 @@ class KnowledgeService:
                 persistence_service.update_document_status(document_id, DocumentStatus.PROCESSING)
             if task_id:
                 persistence_service.update_task_status(task_id, TaskStatus.PROCESSING)
+                redis_service.set_task_status(
+                    task_id,
+                    TaskStatus.PROCESSING.value,
+                    {
+                        "document_id": document_id,
+                        "filename": filename,
+                        "task_type": "sync_document_index",
+                    },
+                )
             saved_files.append(filename)
             document_records.append({"filename": filename, "document_id": document_id, "task_id": task_id})
             if task_id:
@@ -107,6 +117,15 @@ class KnowledgeService:
                     TaskStatus.FAILED,
                     error_message="build_index returned False",
                 )
+                redis_service.set_task_status(
+                    record["task_id"],
+                    TaskStatus.FAILED.value,
+                    {
+                        "document_id": record["document_id"],
+                        "filename": record["filename"],
+                        "error_message": "build_index returned False",
+                    },
+                )
             return {
                 "ok": False,
                 "status_code": 500,
@@ -127,6 +146,16 @@ class KnowledgeService:
                 chunk_count=chunk_count,
             )
             persistence_service.update_task_status(record["task_id"], TaskStatus.COMPLETED)
+            redis_service.set_task_status(
+                record["task_id"],
+                TaskStatus.COMPLETED.value,
+                {
+                    "document_id": record["document_id"],
+                    "filename": record["filename"],
+                    "chunk_count": chunk_count,
+                    "task_type": "sync_document_index",
+                },
+            )
 
         rag_service.reload_agent()
         return {

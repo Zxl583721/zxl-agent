@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.db.init_db import seed_defaults
 from app.db.session import SessionLocal
-from app.models import ChatMessage, ChatSession, Document, DocumentStatus, TaskRecord, TaskStatus
+from app.models import ChatMessage, ChatSession, Document, DocumentStatus, KnowledgeBase, TaskRecord, TaskStatus, User
 
 
 class PersistenceService:
@@ -25,8 +25,40 @@ class PersistenceService:
     def __init__(self) -> None:
         self.settings = get_settings()
 
-    def ensure_defaults(self, db: Session) -> None:
+    def ensure_defaults(
+        self,
+        db: Session,
+        *,
+        user_id: int | None = None,
+        knowledge_base_id: int | None = None,
+    ) -> None:
         seed_defaults(db)
+        target_user_id = user_id or self.settings.default_user_id
+        target_knowledge_base_id = knowledge_base_id or self.settings.default_knowledge_base_id
+
+        user = db.get(User, target_user_id)
+        if user is None:
+            db.add(
+                User(
+                    id=target_user_id,
+                    username=f"user_{target_user_id}",
+                    display_name=f"User {target_user_id}",
+                    is_active=True,
+                )
+            )
+
+        knowledge_base = db.get(KnowledgeBase, target_knowledge_base_id)
+        if knowledge_base is None:
+            db.add(
+                KnowledgeBase(
+                    id=target_knowledge_base_id,
+                    user_id=target_user_id,
+                    name=f"知识库 {target_knowledge_base_id}",
+                    description="Auto-created placeholder knowledge base.",
+                )
+            )
+
+        db.commit()
 
     def create_document_record(
         self,
@@ -40,7 +72,11 @@ class PersistenceService:
     ) -> int | None:
         try:
             with SessionLocal() as db:
-                self.ensure_defaults(db)
+                self.ensure_defaults(
+                    db,
+                    user_id=user_id,
+                    knowledge_base_id=knowledge_base_id,
+                )
                 document = Document(
                     user_id=user_id or self.settings.default_user_id,
                     knowledge_base_id=knowledge_base_id or self.settings.default_knowledge_base_id,
@@ -93,7 +129,11 @@ class PersistenceService:
     ) -> str | None:
         try:
             with SessionLocal() as db:
-                self.ensure_defaults(db)
+                self.ensure_defaults(
+                    db,
+                    user_id=user_id,
+                    knowledge_base_id=knowledge_base_id,
+                )
                 task_id = uuid4().hex
                 task = TaskRecord(
                     task_id=task_id,
@@ -144,7 +184,11 @@ class PersistenceService:
     ) -> None:
         try:
             with SessionLocal() as db:
-                self.ensure_defaults(db)
+                self.ensure_defaults(
+                    db,
+                    user_id=user_id,
+                    knowledge_base_id=knowledge_base_id,
+                )
                 session = self._get_or_create_chat_session(
                     db,
                     conversation_id=conversation_id,
@@ -202,4 +246,3 @@ class PersistenceService:
 
 
 persistence_service = PersistenceService()
-
