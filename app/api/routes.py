@@ -17,12 +17,24 @@ from app.services.task_service import task_service
 router = APIRouter()
 
 
-@router.get("/health", response_model=HealthResponse, tags=["health"])
+@router.get(
+    "/health",
+    response_model=HealthResponse,
+    tags=["系统状态"],
+    summary="健康检查",
+    description="检查 API 服务、数据库、Redis、知识库索引和 RAG 相关依赖是否可用。",
+)
 def health() -> dict:
     return rag_service.health()
 
 
-@router.post("/api/chat", response_model=ChatResponse, tags=["chat"])
+@router.post(
+    "/api/chat",
+    response_model=ChatResponse,
+    tags=["智能问答"],
+    summary="发起一次问答",
+    description="提交问题并返回完整回答。支持知识库问答和通用聊天模式，会记录会话并写入热点缓存。",
+)
 def chat(payload: ChatRequest, response: Response) -> dict:
     question = payload.question.strip()
     if not question:
@@ -72,7 +84,12 @@ def chat(payload: ChatRequest, response: Response) -> dict:
     return result
 
 
-@router.post("/api/chat/stream", tags=["chat"])
+@router.post(
+    "/api/chat/stream",
+    tags=["智能问答"],
+    summary="发起一次流式问答",
+    description="提交问题并通过 Server-Sent Events 持续返回生成过程，适合前端边生成边展示。",
+)
 def chat_stream(payload: ChatRequest, response: Response) -> StreamingResponse:
     question = payload.question.strip()
     if not question:
@@ -143,7 +160,13 @@ def chat_stream(payload: ChatRequest, response: Response) -> StreamingResponse:
     return StreamingResponse(generate(), media_type="text/event-stream", headers=headers)
 
 
-@router.post("/api/knowledge/upload", response_model=KnowledgeUploadResponse, tags=["knowledge"])
+@router.post(
+    "/api/knowledge/upload",
+    response_model=KnowledgeUploadResponse,
+    tags=["知识库"],
+    summary="上传知识库文件",
+    description="上传一个或多个文件，系统会保存文件并提交后台任务进行解析、切分、向量化和索引写入。",
+)
 def upload_knowledge(files: list[UploadFile] = File(...)) -> dict:
     result = knowledge_service.save_and_index_files(files)
     if not result["ok"]:
@@ -158,12 +181,24 @@ def upload_knowledge(files: list[UploadFile] = File(...)) -> dict:
     return result
 
 
-@router.get("/api/knowledge/documents", response_model=DocumentListResponse, tags=["knowledge"])
+@router.get(
+    "/api/knowledge/documents",
+    response_model=DocumentListResponse,
+    tags=["知识库"],
+    summary="查看知识库文档",
+    description="返回当前知识库中已经保存和索引的文档列表。",
+)
 def list_documents() -> dict:
     return {"documents": knowledge_service.list_documents()}
 
 
-@router.get("/api/tasks/{task_id}", response_model=TaskStatusResponse, tags=["tasks"])
+@router.get(
+    "/api/tasks/{task_id}",
+    response_model=TaskStatusResponse,
+    tags=["任务"],
+    summary="查询后台任务状态",
+    description="根据任务 ID 查询文件解析、向量化、索引写入等后台任务的执行状态。",
+)
 def get_task(task_id: str) -> dict:
     result = task_service.get_task_status(task_id)
     if result is None:
