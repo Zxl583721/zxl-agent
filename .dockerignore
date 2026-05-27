@@ -1,0 +1,15 @@
+.env
+.git
+.gitignore
+.conda
+.venv
+__pycache__/
+*.py[cod]
+.DS_Store
+tmp/
+resume/
+面试问答/
+conversation_store.sqlite3*
+vector_store/*
+!vector_store/.gitkeep
+

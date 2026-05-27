@@ -64,7 +64,8 @@ http://127.0.0.1:8000/docs
 | --- | --- | --- |
 | GET | `/health` | 检查服务、Chroma 索引和文本块数量 |
 | POST | `/api/chat` | 调用现有 RAG/LLM 流程进行问答 |
-| POST | `/api/knowledge/upload` | 上传知识库文件并同步构建索引 |
+| POST | `/api/chat/stream` | 使用 SSE 流式返回问答 token |
+| POST | `/api/knowledge/upload` | 上传知识库文件并投递异步索引任务 |
 | GET | `/api/knowledge/documents` | 查看本地知识库文件与索引状态 |
 
 接口测试示例：
@@ -80,6 +81,14 @@ curl -F "files=@data/my_notes.txt" \
   http://127.0.0.1:8000/api/knowledge/upload
 
 curl http://127.0.0.1:8000/api/knowledge/documents
+```
+
+流式问答示例：
+
+```bash
+curl -N -X POST http://127.0.0.1:8000/api/chat/stream \
+  -H "Content-Type: application/json" \
+  -d '{"question":"请概括当前知识库内容","mode":"knowledge"}'
 ```
 
 ### MySQL 数据持久化
@@ -254,6 +263,70 @@ curl http://127.0.0.1:8000/api/tasks/{task_id}
 ```
 
 说明：当前 worker 复用项目已有 `build_index()` 增量索引流程，它会处理新增/变更文件并写入 ChromaDB。后续可以继续细化为单文件级 Chroma 写入和更强的任务并发控制。
+
+### 压测脚本
+
+第五阶段提供了一个轻量压测脚本，覆盖：
+
+```text
+GET /health
+POST /api/chat
+POST /api/chat/stream
+```
+
+运行示例：
+
+```bash
+python scripts/load_test.py \
+  --base-url http://127.0.0.1:8000 \
+  --requests 10 \
+  --concurrency 2
+```
+
+脚本会输出状态码分布、总耗时和 min/avg/p95/max 延迟。由于 `/api/chat` 和 `/api/chat/stream` 会真实调用本地 LLM，压测前请确认 Ollama 或智谱配置可用。
+
+### Docker Compose
+
+第五阶段新增 Docker Compose，一键启动：
+
+```bash
+docker compose up -d
+```
+
+包含服务：
+
+| 服务 | 说明 |
+| --- | --- |
+| `api` | FastAPI 接口服务，启动时自动执行 `python scripts/init_db.py` |
+| `mysql` | MySQL 8.4，保存用户、知识库、文档、会话、消息和任务记录 |
+| `redis` | Redis，提供限流、热点问答缓存、任务状态缓存和 Celery broker/backend |
+| `celery_worker` | 文档解析、切分、向量化和 Chroma 写入 worker |
+
+查看日志：
+
+```bash
+docker compose logs -f api
+docker compose logs -f celery_worker
+```
+
+停止服务：
+
+```bash
+docker compose down
+```
+
+注意：
+
+```text
+Docker Compose 会容器化 API、MySQL、Redis 和 Celery worker。
+LLM 与 embedding 默认仍依赖宿主机 Ollama：
+  LLM_BASE_URL=http://host.docker.internal:11434/v1
+  EMBEDDING_BASE_URL=http://host.docker.internal:11434
+
+如果使用智谱 AI，需要在环境变量中提供 ZHIPUAI_API_KEY。
+ChromaDB 使用本地 ./vector_store 挂载到容器内 /app/vector_store。
+知识库文件使用本地 ./data 挂载到容器内 /app/data。
+```
 
 ### 旧版 CLI / Flask 入口
 

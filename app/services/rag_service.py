@@ -84,10 +84,15 @@ class RAGService:
         question: str,
         conversation_id: str | None = None,
         mode: str = "knowledge",
+        user_id: int | None = None,
+        knowledge_base_id: int | None = None,
     ) -> Generator[dict, None, None]:
+        question = question.strip()
         mode = mode.strip().lower()
         conversation_id = self.conversation_store.get_or_create_conversation(conversation_id)
         history = self.conversation_store.recent_messages(conversation_id, MAX_HISTORY_MESSAGES)
+        answer_parts = []
+        result_metadata = {"mode": mode, "sources": []}
 
         if mode in {"general", "chat"}:
             stream = self.agent.stream_general(question, history=history)
@@ -96,7 +101,48 @@ class RAGService:
 
         yield {"type": "metadata", "conversation_id": conversation_id}
         for event in stream:
+            event_type = event.get("type")
+            if event_type == "metadata":
+                result_metadata.update(event)
+                yield {**event, "conversation_id": conversation_id}
+                continue
+            if event_type == "token":
+                answer_parts.append(str(event.get("content", "")))
             yield event
+
+        answer = "".join(answer_parts).strip()
+        sources = result_metadata.get("sources", [])
+        if sources:
+            answer_with_citations = self.agent._ensure_source_citations(answer, sources)
+            citation_suffix = answer_with_citations[len(answer) :]
+            if citation_suffix:
+                answer_parts.append(citation_suffix)
+                answer = answer_with_citations
+                yield {"type": "token", "content": citation_suffix}
+
+        self.conversation_store.add_message(
+            conversation_id,
+            "user",
+            question,
+            mode=result_metadata.get("mode", mode),
+        )
+        self.conversation_store.add_message(
+            conversation_id,
+            "assistant",
+            answer,
+            mode=result_metadata.get("mode", mode),
+            sources=sources,
+        )
+        persistence_service.record_chat_exchange(
+            conversation_id=conversation_id,
+            question=question,
+            answer=answer,
+            mode=result_metadata.get("mode", mode),
+            sources=sources,
+            user_id=user_id,
+            knowledge_base_id=knowledge_base_id,
+        )
+        yield {"type": "done", "conversation_id": conversation_id}
 
     @staticmethod
     def _status_message(has_index: bool, document_count: int) -> str:

@@ -1,4 +1,8 @@
+import json
+from collections.abc import Generator
+
 from fastapi import APIRouter, File, HTTPException, Response, UploadFile
+from fastapi.responses import StreamingResponse
 
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.schemas.health import HealthResponse
@@ -68,6 +72,77 @@ def chat(payload: ChatRequest, response: Response) -> dict:
     return result
 
 
+@router.post("/api/chat/stream", tags=["chat"])
+def chat_stream(payload: ChatRequest, response: Response) -> StreamingResponse:
+    question = payload.question.strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="请输入一个问题。")
+
+    rate_limit = redis_service.check_chat_rate_limit(payload.user_id)
+    response.headers["X-RateLimit-Limit"] = str(rate_limit.limit)
+    response.headers["X-RateLimit-Remaining"] = str(max(rate_limit.limit - rate_limit.current, 0))
+    if rate_limit.degraded:
+        response.headers["X-RateLimit-Degraded"] = "true"
+    if not rate_limit.allowed:
+        response.headers["Retry-After"] = str(rate_limit.retry_after)
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "message": "请求过于频繁，请稍后再试。",
+                "limit": rate_limit.limit,
+                "retry_after": rate_limit.retry_after,
+            },
+        )
+
+    cached_result = redis_service.get_cached_chat_answer(
+        user_id=payload.user_id,
+        knowledge_base_id=payload.knowledge_base_id,
+        question=question,
+    )
+
+    def generate() -> Generator[str, None, None]:
+        if cached_result:
+            yield sse_event(
+                "metadata",
+                {
+                    "conversation_id": cached_result.get("conversation_id"),
+                    "mode": cached_result.get("mode", payload.mode),
+                    "sources": cached_result.get("sources", []),
+                    "cache_hit": True,
+                    "cache_key": cached_result.get("cache_key"),
+                },
+            )
+            yield sse_event("token", {"content": cached_result.get("answer", "")})
+            yield sse_event("done", {"conversation_id": cached_result.get("conversation_id")})
+            return
+
+        try:
+            for event in rag_service.stream_chat(
+                question=question,
+                conversation_id=payload.conversation_id,
+                mode=payload.mode,
+                user_id=payload.user_id,
+                knowledge_base_id=payload.knowledge_base_id,
+            ):
+                yield sse_event(str(event.get("type", "message")), event)
+        except Exception as exc:
+            yield sse_event("error", {"message": f"生成失败：{exc.__class__.__name__}: {exc}"})
+
+    headers = {
+        "X-Accel-Buffering": "no",
+        "Cache-Control": "no-cache",
+        "X-RateLimit-Limit": str(rate_limit.limit),
+        "X-RateLimit-Remaining": str(max(rate_limit.limit - rate_limit.current, 0)),
+    }
+    if rate_limit.degraded:
+        headers["X-RateLimit-Degraded"] = "true"
+    if cached_result:
+        headers["X-Cache"] = "HIT"
+    else:
+        headers["X-Cache"] = "MISS"
+    return StreamingResponse(generate(), media_type="text/event-stream", headers=headers)
+
+
 @router.post("/api/knowledge/upload", response_model=KnowledgeUploadResponse, tags=["knowledge"])
 def upload_knowledge(files: list[UploadFile] = File(...)) -> dict:
     result = knowledge_service.save_and_index_files(files)
@@ -94,3 +169,7 @@ def get_task(task_id: str) -> dict:
     if result is None:
         raise HTTPException(status_code=404, detail="任务不存在。")
     return result
+
+
+def sse_event(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
