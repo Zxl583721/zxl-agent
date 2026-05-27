@@ -44,6 +44,91 @@ ollama pull bge-m3
 
 ## 运行项目
 
+### FastAPI 接口服务
+
+第一阶段已经新增 FastAPI 后端入口，推荐使用：
+
+```bash
+uvicorn app.main:app --reload --port 8000
+```
+
+启动后可访问：
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+当前接口：
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/health` | 检查服务、Chroma 索引和文本块数量 |
+| POST | `/api/chat` | 调用现有 RAG/LLM 流程进行问答 |
+| POST | `/api/knowledge/upload` | 上传知识库文件并同步构建索引 |
+| GET | `/api/knowledge/documents` | 查看本地知识库文件与索引状态 |
+
+接口测试示例：
+
+```bash
+curl http://127.0.0.1:8000/health
+
+curl -X POST http://127.0.0.1:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"question":"请概括当前知识库内容","mode":"knowledge"}'
+
+curl -F "files=@data/my_notes.txt" \
+  http://127.0.0.1:8000/api/knowledge/upload
+
+curl http://127.0.0.1:8000/api/knowledge/documents
+```
+
+### MySQL 数据持久化
+
+第二阶段已接入 SQLAlchemy + MySQL，用于保存用户、知识库、文档、会话、消息和任务记录。当前还没有登录系统，接口默认使用：
+
+```text
+DEFAULT_USER_ID=1
+DEFAULT_KNOWLEDGE_BASE_ID=1
+```
+
+MySQL 环境变量：
+
+```bash
+MYSQL_HOST=127.0.0.1
+MYSQL_PORT=3306
+MYSQL_USER=zxl_agent
+MYSQL_PASSWORD=zxl_agent
+MYSQL_DATABASE=zxl_agent
+DATABASE_ECHO=false
+```
+
+初始化数据库表：
+
+```bash
+python scripts/init_db.py
+```
+
+当前表结构：
+
+| 表名 | 作用 |
+| --- | --- |
+| `users` | 用户表，当前默认写入 `id=1` 的临时用户 |
+| `knowledge_bases` | 知识库表，当前默认写入 `id=1` 的本地知识库 |
+| `documents` | 文档元信息表，记录文件名、路径、大小、hash、状态和 chunk 数 |
+| `chat_sessions` | 问答会话表，按 `conversation_id` 关联一次多轮会话 |
+| `chat_messages` | 问答消息表，保存用户问题、助手回答和来源 JSON |
+| `task_records` | 任务记录表，第二阶段先记录同步索引任务，后续会接 Celery |
+
+文档状态预留：
+
+```text
+pending -> processing -> completed / failed
+```
+
+说明：如果本地还没有启动 MySQL，FastAPI 应用仍可导入并执行本地 RAG 流程；数据库写入会降级跳过，并在终端输出提示。要完整验证持久化，请先创建 MySQL 数据库并运行初始化脚本。
+
+### 旧版 CLI / Flask 入口
+
 如果已经把知识库文件放入 `data/`，可以先构建向量索引：
 
 ```bash
