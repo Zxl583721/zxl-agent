@@ -18,14 +18,16 @@ class Settings:
     api_prefix = "/api"
     data_dir = BASE_DIR / "data"
     vector_store_dir = BASE_DIR / "vector_store"
-    conversation_db_path = BASE_DIR / "conversation_store.sqlite3"
-    default_user_id = int(os.getenv("DEFAULT_USER_ID", "1"))
-    default_knowledge_base_id = int(os.getenv("DEFAULT_KNOWLEDGE_BASE_ID", "1"))
+    max_upload_bytes = int(os.getenv("MAX_UPLOAD_BYTES", str(20 * 1024 * 1024)))
+    log_level = os.getenv("LOG_LEVEL", "INFO")
+    jwt_secret_key = os.getenv("JWT_SECRET_KEY", "change_me_to_a_32_plus_char_random_secret")
+    jwt_algorithm = os.getenv("JWT_ALGORITHM", "HS256")
+    jwt_access_token_expire_minutes = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
 
     mysql_host = os.getenv("MYSQL_HOST", "127.0.0.1")
     mysql_port = int(os.getenv("MYSQL_PORT", "3306"))
     mysql_user = os.getenv("MYSQL_USER", "zxl_agent")
-    mysql_password = os.getenv("MYSQL_PASSWORD", "zxl_agent")
+    mysql_password = os.getenv("MYSQL_PASSWORD", "change_me_strong_password")
     mysql_database = os.getenv("MYSQL_DATABASE", "zxl_agent")
     database_echo = os.getenv("DATABASE_ECHO", "false").strip().lower() == "true"
     redis_host = os.getenv("REDIS_HOST", "127.0.0.1")

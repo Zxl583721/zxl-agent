@@ -4,16 +4,16 @@ services:
     container_name: zxl-agent-mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: root
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change_me_root_password}
       MYSQL_DATABASE: zxl_agent
       MYSQL_USER: zxl_agent
-      MYSQL_PASSWORD: zxl_agent
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change_me_strong_password}
     ports:
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -24,10 +24,13 @@ services:
     restart: unless-stopped
     ports:
       - "6379:6379"
+    command: sh -c 'if [ -n "$$REDIS_PASSWORD" ]; then redis-server --requirepass "$$REDIS_PASSWORD"; else redis-server; fi'
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "if [ -n \"$${REDIS_PASSWORD}\" ]; then redis-cli -a \"$${REDIS_PASSWORD}\" ping; else redis-cli ping; fi"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -45,15 +48,16 @@ services:
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
       MYSQL_USER: zxl_agent
-      MYSQL_PASSWORD: zxl_agent
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change_me_strong_password}
       MYSQL_DATABASE: zxl_agent
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_DB: 0
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/0
-      DEFAULT_USER_ID: 1
-      DEFAULT_KNOWLEDGE_BASE_ID: 1
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change_me_to_a_32_plus_char_random_secret}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
       LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
       LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
       LLM_API_KEY: ${LLM_API_KEY:-ollama}
@@ -68,7 +72,6 @@ services:
     volumes:
       - ./data:/app/data
       - ./vector_store:/app/vector_store
-      - ./conversation_store.sqlite3:/app/conversation_store.sqlite3
 
   celery_worker:
     build: .
@@ -85,9 +88,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./vector_store:/app/vector_store
-      - ./conversation_store.sqlite3:/app/conversation_store.sqlite3
 
 volumes:
   mysql_data:
   redis_data:
-

@@ -7,8 +7,11 @@ from dataclasses import dataclass
 from redis.exceptions import RedisError
 
 from app.core.config import get_settings
+from app.core.logging import get_logger
 from app.core.redis import get_redis_client
 
+
+logger = get_logger(__name__)
 
 @dataclass
 class RateLimitResult:
@@ -48,7 +51,7 @@ class RedisService:
                 retry_after=retry_after,
             )
         except RedisError as exc:
-            print(f"Redis 限流不可用，已降级放行：{exc}")
+            logger.warning("Redis rate limit unavailable, allowing request: %s", exc.__class__.__name__)
             return RateLimitResult(allowed=True, key=key, limit=limit, degraded=True)
 
     def get_cached_chat_answer(self, *, user_id: int, knowledge_base_id: int, question: str) -> dict | None:
@@ -56,7 +59,7 @@ class RedisService:
         try:
             value = self.client.get(key)
         except RedisError as exc:
-            print(f"Redis 问答缓存读取失败，已降级：{exc}")
+            logger.warning("Redis chat cache read failed, degraded: %s", exc.__class__.__name__)
             return None
 
         if not value:
@@ -93,7 +96,7 @@ class RedisService:
             )
             return key
         except RedisError as exc:
-            print(f"Redis 问答缓存写入失败，已降级：{exc}")
+            logger.warning("Redis chat cache write failed, degraded: %s", exc.__class__.__name__)
             return None
 
     def set_task_status(self, task_id: str | None, status: str, payload: dict | None = None) -> None:
@@ -108,13 +111,13 @@ class RedisService:
                 json.dumps(data, ensure_ascii=False),
             )
         except RedisError as exc:
-            print(f"Redis 任务状态缓存写入失败，已降级：{exc}")
+            logger.warning("Redis task status write failed, degraded: %s", exc.__class__.__name__)
 
     def get_task_status(self, task_id: str) -> dict | None:
         try:
             value = self.client.get(self.task_status_key(task_id))
         except RedisError as exc:
-            print(f"Redis 任务状态缓存读取失败，已降级：{exc}")
+            logger.warning("Redis task status read failed, degraded: %s", exc.__class__.__name__)
             return None
         if not value:
             return None
@@ -137,3 +140,6 @@ class RedisService:
 
 redis_service = RedisService()
 
+
+def get_redis_service() -> RedisService:
+    return redis_service

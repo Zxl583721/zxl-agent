@@ -12,14 +12,30 @@ def request_health(base_url: str, timeout: float) -> tuple[int, float]:
     return response.status_code, time.perf_counter() - start
 
 
-def request_chat(base_url: str, timeout: float, index: int) -> tuple[int, float]:
+def auth_headers(base_url: str, timeout: float) -> dict:
+    username = "load_test_user"
+    password = "password123"
+    requests.post(
+        f"{base_url}/api/auth/register",
+        json={"username": username, "password": password},
+        timeout=timeout,
+    )
+    response = requests.post(
+        f"{base_url}/api/auth/login",
+        json={"username": username, "password": password},
+        timeout=timeout,
+    )
+    token = response.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+def request_chat(base_url: str, timeout: float, index: int, headers: dict) -> tuple[int, float]:
     start = time.perf_counter()
     response = requests.post(
         f"{base_url}/api/chat",
+        headers=headers,
         json={
             "question": f"压测问题 {index}：请用一句话回答当前知识库是否可用。",
-            "user_id": 9000 + index,
-            "knowledge_base_id": 1,
             "mode": "knowledge",
         },
         timeout=timeout,
@@ -27,14 +43,13 @@ def request_chat(base_url: str, timeout: float, index: int) -> tuple[int, float]
     return response.status_code, time.perf_counter() - start
 
 
-def request_chat_stream(base_url: str, timeout: float, index: int) -> tuple[int, float]:
+def request_chat_stream(base_url: str, timeout: float, index: int, headers: dict) -> tuple[int, float]:
     start = time.perf_counter()
     with requests.post(
         f"{base_url}/api/chat/stream",
+        headers=headers,
         json={
             "question": f"流式压测问题 {index}：请用一句话回答当前知识库是否可用。",
-            "user_id": 19000 + index,
-            "knowledge_base_id": 1,
             "mode": "knowledge",
         },
         stream=True,
@@ -92,11 +107,11 @@ def main() -> None:
     args = parser.parse_args()
 
     base_url = args.base_url.rstrip("/")
+    headers = auth_headers(base_url, args.timeout)
     run_case("GET /health", lambda url, timeout, index: request_health(url, timeout), base_url, args.requests, args.concurrency, args.timeout)
-    run_case("POST /api/chat", request_chat, base_url, args.requests, args.concurrency, args.timeout)
-    run_case("POST /api/chat/stream", request_chat_stream, base_url, args.requests, args.concurrency, args.timeout)
+    run_case("POST /api/chat", lambda url, timeout, index: request_chat(url, timeout, index, headers), base_url, args.requests, args.concurrency, args.timeout)
+    run_case("POST /api/chat/stream", lambda url, timeout, index: request_chat_stream(url, timeout, index, headers), base_url, args.requests, args.concurrency, args.timeout)
 
 
 if __name__ == "__main__":
     main()
-

@@ -9,10 +9,15 @@ class DocumentInfo(BaseModel):
     status: str
     chunk_count: int = 0
     hash: str = ""
+    knowledge_base_id: int | None = None
+    created_at: str | None = None
 
 
 class DocumentListResponse(BaseModel):
-    documents: list[DocumentInfo] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    page_size: int = 20
+    items: list[DocumentInfo] = Field(default_factory=list)
 
 
 class KnowledgeUploadResponse(BaseModel):
@@ -21,3 +26,4 @@ class KnowledgeUploadResponse(BaseModel):
     rejected_files: list[str] = Field(default_factory=list)
     document_ids: list[int] = Field(default_factory=list)
     task_ids: list[str] = Field(default_factory=list)
+    knowledge_base_id: int | None = None

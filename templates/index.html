@@ -13,17 +13,13 @@
       --muted: #6b7280;
       --line: #d7dde5;
       --accent: #2563eb;
-      --accent-dark: #1d4ed8;
       --ok: #0f766e;
       --warn: #b45309;
+      --danger: #b91c1c;
       --user: #e9f1ff;
       --agent: #f3f4f6;
     }
-
-    * {
-      box-sizing: border-box;
-    }
-
+    * { box-sizing: border-box; }
     body {
       margin: 0;
       min-height: 100vh;
@@ -31,212 +27,53 @@
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
-
-    .app {
-      display: grid;
-      grid-template-columns: 280px minmax(0, 1fr);
-      min-height: 100vh;
-    }
-
-    .sidebar {
-      border-right: 1px solid var(--line);
-      background: #eef2f7;
-      padding: 24px;
-    }
-
-    .brand {
-      margin: 0 0 24px;
-      font-size: 24px;
-      line-height: 1.2;
-      font-weight: 700;
-    }
-
-    .status {
+    button, input, textarea, select { font: inherit; }
+    button {
+      min-height: 38px;
       border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--panel);
-      padding: 16px;
-    }
-
-    .status-label {
-      margin: 0 0 8px;
-      color: var(--muted);
-      font-size: 13px;
-    }
-
-    .status-value {
-      margin: 0;
-      font-size: 15px;
-      line-height: 1.55;
-    }
-
-    .status-value.ready {
-      color: var(--ok);
-    }
-
-    .status-value.pending {
-      color: var(--warn);
-    }
-
-    .tips {
-      margin-top: 24px;
-      color: var(--muted);
-      font-size: 14px;
-      line-height: 1.7;
-    }
-
-    .upload {
-      margin-top: 18px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--panel);
-      padding: 16px;
-    }
-
-    .upload-label {
-      display: block;
-      margin: 0 0 8px;
-      color: var(--muted);
-      font-size: 13px;
-    }
-
-    .upload input[type="file"] {
-      width: 100%;
-      margin-bottom: 10px;
-      color: var(--muted);
-      font: inherit;
-      font-size: 13px;
-    }
-
-    .upload-button {
-      width: 100%;
-      height: 40px;
-      font-size: 14px;
-    }
-
-    .upload-message {
-      margin: 10px 0 0;
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.5;
-    }
-
-    .documents {
-      margin-top: 18px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--panel);
-      padding: 16px;
-    }
-
-    .documents-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      margin-bottom: 10px;
-    }
-
-    .documents-title {
-      margin: 0;
-      font-size: 14px;
-      font-weight: 700;
-    }
-
-    .refresh-button {
-      height: 28px;
-      border: 1px solid var(--line);
+      border-radius: 6px;
       background: #fff;
       color: var(--text);
-      padding: 0 10px;
-      font-size: 13px;
+      cursor: pointer;
+      font-weight: 700;
     }
-
-    .refresh-button:hover {
-      background: #f3f4f6;
-    }
-
-    .document-list {
-      display: grid;
-      gap: 8px;
-      max-height: 260px;
-      overflow-y: auto;
-    }
-
-    .document-item {
-      border-top: 1px solid var(--line);
-      padding-top: 8px;
-    }
-
-    .document-name {
-      margin: 0 0 4px;
-      color: var(--text);
-      font-size: 13px;
-      line-height: 1.4;
-      overflow-wrap: anywhere;
-    }
-
-    .document-meta {
-      margin: 0;
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.5;
-    }
-
-    .document-actions {
-      margin-top: 6px;
-    }
-
-    .document-delete {
-      height: 28px;
-      border: 1px solid #fecaca;
+    button.primary { border-color: var(--accent); background: var(--accent); color: #fff; }
+    button:disabled { cursor: not-allowed; opacity: .6; }
+    input, textarea, select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
       background: #fff;
-      color: #b91c1c;
-      padding: 0 10px;
-      font-size: 12px;
+      color: var(--text);
     }
-
-    .document-delete:hover {
-      background: #fef2f2;
-    }
-
-    .document-delete:disabled,
-    .refresh-button:disabled {
-      opacity: 0.6;
-    }
-
-    .main {
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr) auto;
-      min-width: 0;
-      height: 100vh;
-    }
-
-    .topbar {
-      border-bottom: 1px solid var(--line);
+    input, select { height: 38px; padding: 0 10px; }
+    textarea { min-height: 72px; padding: 10px; resize: vertical; line-height: 1.55; }
+    .app { display: grid; grid-template-columns: 300px minmax(0, 1fr); min-height: 100vh; }
+    .sidebar { border-right: 1px solid var(--line); background: #eef2f7; padding: 22px; }
+    .brand { margin: 0 0 18px; font-size: 24px; line-height: 1.2; }
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
       background: var(--panel);
-      padding: 18px 24px;
+      padding: 14px;
+      margin-bottom: 16px;
     }
-
-    .topbar h1 {
-      margin: 0;
-      font-size: 20px;
-      line-height: 1.3;
-    }
-
-    .topbar p {
-      margin: 4px 0 0;
-      color: var(--muted);
-      font-size: 14px;
-    }
-
-    .messages {
-      overflow-y: auto;
-      padding: 24px;
-    }
-
+    .panel h2 { margin: 0 0 10px; font-size: 15px; }
+    .stack { display: grid; gap: 10px; }
+    .muted { color: var(--muted); }
+    .small { font-size: 13px; line-height: 1.5; }
+    .status.ready { color: var(--ok); }
+    .status.pending { color: var(--warn); }
+    .status.error { color: var(--danger); }
+    .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .tabs button.active { border-color: var(--accent); color: var(--accent); }
+    .main { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-width: 0; height: 100vh; }
+    .topbar { border-bottom: 1px solid var(--line); background: var(--panel); padding: 18px 24px; }
+    .topbar h1 { margin: 0; font-size: 20px; }
+    .topbar p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+    .messages { overflow-y: auto; padding: 24px; }
     .message {
-      max-width: 840px;
+      max-width: 860px;
       margin-bottom: 14px;
       padding: 14px 16px;
       border: 1px solid var(--line);
@@ -244,348 +81,191 @@
       line-height: 1.65;
       overflow-wrap: anywhere;
     }
-
-    .message.user {
-      margin-left: auto;
-      background: var(--user);
-      white-space: pre-wrap;
-    }
-
-    .message.agent {
-      background: var(--agent);
-    }
-
-    .message.markdown p {
-      margin: 0 0 10px;
-    }
-
-    .message.markdown p:last-child {
-      margin-bottom: 0;
-    }
-
-    .message.markdown ul,
-    .message.markdown ol {
-      margin: 8px 0 8px 22px;
-      padding: 0;
-    }
-
-    .message.markdown li {
-      margin: 4px 0;
-    }
-
-    .message.markdown code {
-      border-radius: 4px;
-      background: rgba(15, 23, 42, 0.08);
-      padding: 2px 5px;
-      font-family: "SFMono-Regular", Consolas, monospace;
-      font-size: 0.92em;
-    }
-
-    .message.markdown pre {
-      overflow-x: auto;
-      border-radius: 8px;
-      background: #111827;
-      color: #f9fafb;
-      padding: 12px;
-      white-space: pre;
-    }
-
-    .message.markdown pre code {
-      background: transparent;
-      padding: 0;
-      color: inherit;
-    }
-
-    .message.markdown table {
-      width: 100%;
-      border-collapse: collapse;
-      margin: 10px 0;
-      overflow-wrap: normal;
-    }
-
-    .message.markdown th,
-    .message.markdown td {
-      border: 1px solid var(--line);
-      padding: 6px 8px;
-      text-align: left;
-      vertical-align: top;
-    }
-
-    .message.markdown mjx-container {
-      overflow-x: auto;
-      overflow-y: hidden;
-      max-width: 100%;
-    }
-
-    .sources {
-      margin-top: 12px;
-      border-top: 1px solid var(--line);
-      padding-top: 10px;
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.55;
-    }
-
-    .sources-title {
-      margin: 0 0 6px;
-      color: var(--text);
-      font-weight: 600;
-    }
-
-    .sources-list {
-      margin: 0;
-      padding-left: 18px;
-    }
-
-    .sources-list li {
-      margin: 4px 0;
-    }
-
-    .composer {
-      border-top: 1px solid var(--line);
-      background: var(--panel);
-      padding: 16px 24px;
-    }
-
-    .mode-switch {
-      display: flex;
-      gap: 8px;
-      max-width: 980px;
-      margin: 0 auto 12px;
-    }
-
-    .mode-option {
-      position: relative;
-      display: inline-flex;
-      align-items: center;
-      min-height: 36px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #fff;
-      color: var(--muted);
-      padding: 0 12px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-
-    .mode-option input {
-      position: absolute;
-      opacity: 0;
-      pointer-events: none;
-    }
-
-    .mode-option:has(input:checked) {
-      border-color: rgba(37, 99, 235, 0.45);
-      background: #e9f1ff;
-      color: var(--accent-dark);
-    }
-
-    .composer-form {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 92px;
-      gap: 12px;
-      max-width: 980px;
-      margin: 0 auto;
-    }
-
-    textarea {
-      width: 100%;
-      min-height: 48px;
-      max-height: 160px;
-      resize: vertical;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 12px 14px;
-      color: var(--text);
-      font: inherit;
-      line-height: 1.5;
-      outline: none;
-    }
-
-    textarea:focus {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
-    }
-
-    button {
-      height: 48px;
-      border: 0;
-      border-radius: 8px;
-      background: var(--accent);
-      color: #fff;
-      font: inherit;
-      font-weight: 600;
-      cursor: pointer;
-    }
-
-    button:hover {
-      background: var(--accent-dark);
-    }
-
-    button:disabled {
-      cursor: not-allowed;
-      opacity: 0.6;
-    }
-
-    @media (max-width: 760px) {
-      .app {
-        grid-template-columns: 1fr;
-      }
-
-      .sidebar {
-        border-right: 0;
-        border-bottom: 1px solid var(--line);
-      }
-
-      .main {
-        height: auto;
-        min-height: 70vh;
-      }
-
-      .composer-form {
-        grid-template-columns: 1fr;
-      }
-
-      .mode-switch {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-      }
-
-      .mode-option {
-        justify-content: center;
-      }
-
-      button {
-        width: 100%;
-      }
+    .message.user { margin-left: auto; background: var(--user); white-space: pre-wrap; }
+    .message.agent { background: var(--agent); }
+    .message.markdown p { margin: 0 0 10px; }
+    .sources { margin-top: 12px; display: grid; gap: 8px; }
+    .source { border-top: 1px solid var(--line); padding-top: 8px; color: var(--muted); font-size: 13px; }
+    .composer { border-top: 1px solid var(--line); background: var(--panel); padding: 16px 24px; }
+    .composer form { display: grid; grid-template-columns: minmax(0, 1fr) 130px 82px; gap: 10px; align-items: end; }
+    .document-list { display: grid; gap: 8px; max-height: 260px; overflow-y: auto; }
+    .document-item { border-top: 1px solid var(--line); padding-top: 8px; }
+    .document-name { margin: 0 0 4px; font-size: 13px; overflow-wrap: anywhere; }
+    .document-meta { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .hidden { display: none !important; }
+    @media (max-width: 860px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { border-right: 0; border-bottom: 1px solid var(--line); }
+      .main { height: auto; min-height: 70vh; }
+      .composer form { grid-template-columns: 1fr; }
     }
   </style>
+  <script defer src="/static/vendor/purify.min.js"></script>
+  <script defer src="/static/vendor/marked.umd.js"></script>
 </head>
 <body>
   <div class="app">
     <aside class="sidebar">
-      <h2 class="brand">RAG Agent</h2>
-      <section class="status" aria-live="polite">
-        <p class="status-label">知识库状态</p>
-        <p id="statusText" class="status-value pending">正在检查索引...</p>
-      </section>
-      <form id="uploadForm" class="upload">
-        <label class="upload-label" for="fileInput">上传资料并自动入库</label>
-        <input id="fileInput" type="file" name="files" accept=".txt,.pdf,.docx,.pptx" multiple>
-        <button id="uploadButton" class="upload-button" type="submit">上传入库</button>
-        <p id="uploadMessage" class="upload-message">支持 txt、pdf、docx、pptx。</p>
-      </form>
-      <section class="documents">
-        <div class="documents-header">
-          <h3 class="documents-title">文档管理</h3>
-          <button id="refreshDocumentsButton" class="refresh-button" type="button">刷新</button>
+      <h1 class="brand">RAG Agent</h1>
+
+      <section class="panel" id="authPanel">
+        <div class="tabs">
+          <button type="button" class="active" id="loginTab">登录</button>
+          <button type="button" id="registerTab">注册</button>
         </div>
-        <div id="documentList" class="document-list" aria-live="polite">
-          <p class="document-meta">正在加载文档...</p>
+        <form class="stack" id="authForm" style="margin-top: 12px;">
+          <input id="username" autocomplete="username" placeholder="用户名">
+          <input id="password" autocomplete="current-password" type="password" placeholder="密码">
+          <input id="email" class="hidden" autocomplete="email" type="email" placeholder="邮箱，可选">
+          <button class="primary" id="authButton" type="submit">登录</button>
+          <p class="small muted" id="authMessage">请先登录后使用知识库。</p>
+        </form>
+      </section>
+
+      <section class="panel hidden" id="userPanel">
+        <h2>当前用户</h2>
+        <p class="small" id="currentUser">未登录</p>
+        <button type="button" id="logoutButton">退出登录</button>
+      </section>
+
+      <section class="panel">
+        <h2>服务状态</h2>
+        <p class="small status pending" id="statusText">等待登录后检查。</p>
+      </section>
+
+      <section class="panel hidden" id="uploadPanel">
+        <h2>上传文档</h2>
+        <form class="stack" id="uploadForm">
+          <input id="knowledgeBaseId" type="number" min="1" placeholder="知识库 ID，默认自动创建">
+          <input id="fileInput" type="file" multiple accept=".txt,.pdf,.docx,.pptx">
+          <button class="primary" id="uploadButton" type="submit">上传入库</button>
+          <p class="small muted" id="uploadMessage">支持 txt、pdf、docx、pptx。</p>
+        </form>
+      </section>
+
+      <section class="panel hidden" id="documentsPanel">
+        <h2>文档列表</h2>
+        <div class="stack">
+          <button type="button" id="refreshDocumentsButton">刷新文档</button>
+          <div class="document-list" id="documentList">
+            <p class="small muted">暂无文档。</p>
+          </div>
         </div>
       </section>
-      <p class="tips">
-        也可以手动将文件放入 data/ 后运行 python build_index.py 构建或更新 Chroma 索引。
-      </p>
     </aside>
 
     <main class="main">
       <header class="topbar">
-        <h1>个人知识库问答</h1>
-        <p>基于本地 Chroma 检索和配置的大模型生成回答。</p>
+        <h1>知识库问答</h1>
+        <p>登录后上传自己的资料，并在隔离的知识库中发起问答。</p>
       </header>
-
-      <section id="messages" class="messages">
-        <div class="message agent">你好，我已经准备好接收问题了。知识库未就绪时，我会提示你先构建索引。</div>
+      <section class="messages" id="messages">
+        <div class="message agent">请先登录或注册账号。</div>
       </section>
-
-      <footer class="composer">
-        <div class="mode-switch" role="radiogroup" aria-label="回答模式">
-          <label class="mode-option">
-            <input type="radio" name="chatMode" value="knowledge" checked>
-            知识库问答
-          </label>
-          <label class="mode-option">
-            <input type="radio" name="chatMode" value="general">
-            通用聊天
-          </label>
-        </div>
-        <form id="chatForm" class="composer-form">
-          <textarea id="questionInput" placeholder="输入你的问题..." rows="2" autocomplete="off"></textarea>
-          <button id="sendButton" type="submit">发送</button>
+      <section class="composer">
+        <form id="chatForm">
+          <textarea id="questionInput" placeholder="输入问题，按 Enter 发送，Shift + Enter 换行"></textarea>
+          <select id="modeInput">
+            <option value="knowledge" selected>知识库问答</option>
+            <option value="general">通用聊天</option>
+          </select>
+          <button class="primary" id="sendButton" type="submit">发送</button>
         </form>
-      </footer>
+      </section>
     </main>
   </div>
 
   <script>
-    window.MathJax = {
-      tex: {
-        inlineMath: [["$", "$"]],
-        displayMath: [["$$", "$$"]],
-        processEscapes: true,
-      },
-      options: {
-        skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code"],
-      },
-    };
-  </script>
-  <script defer src="{{ url_for('static', filename='vendor/purify.min.js') }}"></script>
-  <script defer src="{{ url_for('static', filename='vendor/marked.umd.js') }}"></script>
-  <script defer src="{{ url_for('static', filename='vendor/tex-mml-chtml.js') }}"></script>
-  <script>
-    const messages = document.querySelector("#messages");
-    const form = document.querySelector("#chatForm");
-    const uploadForm = document.querySelector("#uploadForm");
-    const fileInput = document.querySelector("#fileInput");
-    const input = document.querySelector("#questionInput");
-    const button = document.querySelector("#sendButton");
-    const uploadButton = document.querySelector("#uploadButton");
-    const refreshDocumentsButton = document.querySelector("#refreshDocumentsButton");
-    const statusText = document.querySelector("#statusText");
-    const uploadMessage = document.querySelector("#uploadMessage");
-    const documentList = document.querySelector("#documentList");
+    const tokenKey = "zxl-agent-access-token";
     const conversationStorageKey = "zxl-agent-conversation-id";
-    const initialMessageText = "你好，我已经准备好接收问题了。知识库未就绪时，我会提示你先构建索引。";
-    let conversationId = getOrCreateConversationId();
+    let token = window.sessionStorage.getItem(tokenKey) || "";
+    let conversationId = window.localStorage.getItem(conversationStorageKey) || "";
+    let authMode = "login";
 
-    function currentChatMode() {
-      return document.querySelector('input[name="chatMode"]:checked')?.value || "knowledge";
+    const authPanel = document.querySelector("#authPanel");
+    const userPanel = document.querySelector("#userPanel");
+    const uploadPanel = document.querySelector("#uploadPanel");
+    const documentsPanel = document.querySelector("#documentsPanel");
+    const loginTab = document.querySelector("#loginTab");
+    const registerTab = document.querySelector("#registerTab");
+    const authForm = document.querySelector("#authForm");
+    const authButton = document.querySelector("#authButton");
+    const authMessage = document.querySelector("#authMessage");
+    const usernameInput = document.querySelector("#username");
+    const passwordInput = document.querySelector("#password");
+    const emailInput = document.querySelector("#email");
+    const currentUser = document.querySelector("#currentUser");
+    const logoutButton = document.querySelector("#logoutButton");
+    const statusText = document.querySelector("#statusText");
+    const messages = document.querySelector("#messages");
+    const chatForm = document.querySelector("#chatForm");
+    const questionInput = document.querySelector("#questionInput");
+    const modeInput = document.querySelector("#modeInput");
+    const sendButton = document.querySelector("#sendButton");
+    const uploadForm = document.querySelector("#uploadForm");
+    const uploadButton = document.querySelector("#uploadButton");
+    const uploadMessage = document.querySelector("#uploadMessage");
+    const fileInput = document.querySelector("#fileInput");
+    const knowledgeBaseIdInput = document.querySelector("#knowledgeBaseId");
+    const refreshDocumentsButton = document.querySelector("#refreshDocumentsButton");
+    const documentList = document.querySelector("#documentList");
+
+    function authHeaders(extra = {}) {
+      return token ? { ...extra, Authorization: `Bearer ${token}` } : extra;
     }
 
-    function getOrCreateConversationId() {
-      const existingId = window.localStorage.getItem(conversationStorageKey);
-      if (existingId) {
-        return existingId;
+    async function apiFetch(url, options = {}) {
+      const response = await fetch(url, {
+        ...options,
+        headers: authHeaders(options.headers || {}),
+      });
+      if (response.status === 401) {
+        clearToken();
+        throw new Error("请重新登录。");
       }
-
-      const nextId = window.crypto?.randomUUID
-        ? window.crypto.randomUUID()
-        : `conversation-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-      window.localStorage.setItem(conversationStorageKey, nextId);
-      return nextId;
+      return response;
     }
 
-    function setConversationId(nextId) {
-      if (!nextId || nextId === conversationId) {
-        return;
-      }
-      conversationId = nextId;
-      window.localStorage.setItem(conversationStorageKey, nextId);
+    function setAuthMode(nextMode) {
+      authMode = nextMode;
+      const isRegister = authMode === "register";
+      loginTab.classList.toggle("active", !isRegister);
+      registerTab.classList.toggle("active", isRegister);
+      emailInput.classList.toggle("hidden", !isRegister);
+      authButton.textContent = isRegister ? "注册" : "登录";
+      authMessage.textContent = isRegister ? "注册后会自动登录。" : "请先登录后使用知识库。";
     }
 
-    function resetMessages() {
-      messages.innerHTML = "";
-      appendMessage("agent", initialMessageText);
+    function setToken(nextToken) {
+      token = nextToken;
+      window.sessionStorage.setItem(tokenKey, token);
     }
 
-    function appendMessage(role, text, sources = []) {
+    function clearToken() {
+      token = "";
+      window.sessionStorage.removeItem(tokenKey);
+      authPanel.classList.remove("hidden");
+      userPanel.classList.add("hidden");
+      uploadPanel.classList.add("hidden");
+      documentsPanel.classList.add("hidden");
+      messages.innerHTML = '<div class="message agent">请先登录或注册账号。</div>';
+      statusText.textContent = "等待登录后检查。";
+      statusText.className = "small status pending";
+    }
+
+    function renderLoggedIn(user) {
+      authPanel.classList.add("hidden");
+      userPanel.classList.remove("hidden");
+      uploadPanel.classList.remove("hidden");
+      documentsPanel.classList.remove("hidden");
+      currentUser.textContent = `${user.display_name || user.username}（ID ${user.id}）`;
+    }
+
+    function appendMessage(role, text) {
       const node = document.createElement("div");
       node.className = `message ${role}`;
       if (role === "agent") {
         renderMarkdownMessage(node, text);
-        renderSources(node, sources);
       } else {
         node.textContent = text;
       }
@@ -595,215 +275,151 @@
     }
 
     function renderMarkdownMessage(node, text) {
-      node.classList.add("markdown");
-
       if (!window.marked || !window.DOMPurify) {
         node.textContent = text;
         return;
       }
-
-      const html = window.marked.parse(text, {
-        breaks: true,
-        gfm: true,
-      });
+      node.classList.add("markdown");
+      const html = window.marked.parse(text || "", { breaks: true, gfm: true });
       node.innerHTML = window.DOMPurify.sanitize(html);
-
-      if (window.MathJax?.typesetPromise) {
-        window.MathJax.typesetPromise([node]).catch(() => {});
-      }
     }
 
     function renderSources(node, sources) {
-      if (!Array.isArray(sources) || sources.length === 0) {
+      if (!sources || sources.length === 0) {
         return;
       }
+      const sourcesNode = document.createElement("div");
+      sourcesNode.className = "sources";
+      for (const source of sources) {
+        const item = document.createElement("div");
+        item.className = "source";
+        const name = source.source || "未命名文档";
+        const page = source.page_range || source.start_page || "";
+        const chapter = source.chapter ? `章节：${source.chapter}` : "";
+        const pageText = page ? `页码：${page}` : "";
+        item.textContent = [name, chapter, pageText].filter(Boolean).join("，");
+        sourcesNode.appendChild(item);
+      }
+      node.appendChild(sourcesNode);
+    }
 
-      const wrapper = document.createElement("section");
-      wrapper.className = "sources";
-
-      const title = document.createElement("p");
-      title.className = "sources-title";
-      title.textContent = "参考来源";
-      wrapper.appendChild(title);
-
-      const list = document.createElement("ol");
-      list.className = "sources-list";
-
-      sources.forEach((source) => {
-        const item = document.createElement("li");
-        const pageRange = source.page_range || "未知";
-        const sourceId = source.source_id ? `资料 ${source.source_id}｜` : "";
-        item.textContent = `${sourceId}来源：${source.source || "unknown"}；章节：${source.chapter || "未识别章节"}；页码：${pageRange}`;
-        list.appendChild(item);
-      });
-
-      wrapper.appendChild(list);
-      node.appendChild(wrapper);
+    async function loadMe() {
+      if (!token) {
+        clearToken();
+        return;
+      }
+      try {
+        const response = await apiFetch("/api/auth/me");
+        const user = await response.json();
+        renderLoggedIn(user);
+        await loadStatus();
+        await loadDocuments();
+      } catch (error) {
+        clearToken();
+      }
     }
 
     async function loadStatus() {
-      if (window.location.protocol === "file:") {
-        statusText.textContent = "请通过 http://127.0.0.1:5001 打开页面，直接打开 HTML 文件无法调用后端。";
-        statusText.className = "status-value pending";
-        return;
-      }
-
-      const response = await fetch("/api/status");
-      const status = await response.json();
-      statusText.textContent = status.message;
-      statusText.className = `status-value ${status.ready ? "ready" : "pending"}`;
-    }
-
-    async function loadConversation() {
-      if (window.location.protocol === "file:") {
-        return;
-      }
-
       try {
-        const response = await fetch(`/api/conversations/${encodeURIComponent(conversationId)}/messages`);
+        const response = await fetch("/health");
         const data = await response.json();
-        setConversationId(data.conversation_id);
-        const history = Array.isArray(data.messages) ? data.messages : [];
-        if (!history.length) {
-          return;
-        }
-
-        messages.innerHTML = "";
-        history.forEach((message) => {
-          const role = message.role === "user" ? "user" : "agent";
-          appendMessage(role, message.content || "", message.sources || []);
-        });
+        statusText.textContent = `状态：${data.status}，MySQL ${data.services.mysql}，Redis ${data.services.redis}，Chroma ${data.services.chroma}，Celery ${data.services.celery}`;
+        statusText.className = data.status === "ok" ? "small status ready" : "small status pending";
       } catch (error) {
-        resetMessages();
+        statusText.textContent = "状态读取失败。";
+        statusText.className = "small status error";
       }
     }
 
     async function loadDocuments() {
-      if (window.location.protocol === "file:") {
-        documentList.innerHTML = "";
-        const message = document.createElement("p");
-        message.className = "document-meta";
-        message.textContent = "请通过本地服务查看文档。";
-        documentList.appendChild(message);
-        return;
-      }
-
-      refreshDocumentsButton.disabled = true;
+      if (!token) return;
+      const kb = knowledgeBaseIdInput.value ? `&knowledge_base_id=${encodeURIComponent(knowledgeBaseIdInput.value)}` : "";
       try {
-        const response = await fetch("/api/documents");
+        const response = await apiFetch(`/api/knowledge/documents?page=1&page_size=20${kb}`);
         const data = await response.json();
-        renderDocuments(data.documents || []);
-      } catch (error) {
         documentList.innerHTML = "";
-        const message = document.createElement("p");
-        message.className = "document-meta";
-        message.textContent = "文档列表加载失败。";
-        documentList.appendChild(message);
-      } finally {
-        refreshDocumentsButton.disabled = false;
-      }
-    }
-
-    function renderDocuments(documents) {
-      documentList.innerHTML = "";
-      if (!documents.length) {
-        const empty = document.createElement("p");
-        empty.className = "document-meta";
-        empty.textContent = "暂无已上传文档。";
-        documentList.appendChild(empty);
-        return;
-      }
-
-      documents.forEach((documentInfo) => {
-        const item = document.createElement("article");
-        item.className = "document-item";
-
-        const name = document.createElement("p");
-        name.className = "document-name";
-        name.textContent = documentInfo.filename;
-        item.appendChild(name);
-
-        const meta = document.createElement("p");
-        meta.className = "document-meta";
-        meta.textContent = `状态：${statusLabel(documentInfo.status)}；文本块：${documentInfo.chunk_count || 0}；hash：${documentInfo.hash || "-"}`;
-        item.appendChild(meta);
-
-        if (documentInfo.exists) {
-          const actions = document.createElement("div");
-          actions.className = "document-actions";
-          const deleteButton = document.createElement("button");
-          deleteButton.className = "document-delete";
-          deleteButton.type = "button";
-          deleteButton.textContent = "删除";
-          deleteButton.addEventListener("click", () => deleteDocument(documentInfo.filename));
-          actions.appendChild(deleteButton);
-          item.appendChild(actions);
+        if (!data.items || data.items.length === 0) {
+          documentList.innerHTML = '<p class="small muted">暂无文档。</p>';
+          return;
         }
-
-        documentList.appendChild(item);
-      });
+        for (const documentItem of data.items) {
+          const item = document.createElement("div");
+          item.className = "document-item";
+          item.innerHTML = `
+            <p class="document-name"></p>
+            <p class="document-meta"></p>
+          `;
+          item.querySelector(".document-name").textContent = documentItem.filename;
+          item.querySelector(".document-meta").textContent = `状态：${documentItem.status}，分块：${documentItem.chunk_count}，hash：${documentItem.hash}`;
+          documentList.appendChild(item);
+        }
+      } catch (error) {
+        documentList.innerHTML = '<p class="small muted">读取文档失败。</p>';
+      }
     }
 
-    function statusLabel(status) {
-      const labels = {
-        indexed: "已入库",
-        changed: "待更新",
-        new: "未入库",
-        deleted: "已删除待同步",
-      };
-      return labels[status] || "未知";
-    }
-
-    async function deleteDocument(filename) {
-      if (!window.confirm(`确定删除 ${filename} 并更新索引吗？`)) {
+    authForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const username = usernameInput.value.trim();
+      const password = passwordInput.value;
+      if (!username || !password) {
+        authMessage.textContent = "请输入用户名和密码。";
         return;
       }
-
-      uploadMessage.textContent = "正在删除文件并更新索引。";
+      const payload = { username, password };
+      if (authMode === "register" && emailInput.value.trim()) {
+        payload.email = emailInput.value.trim();
+      }
+      authButton.disabled = true;
       try {
-        const response = await fetch("/api/documents/delete", {
+        const response = await fetch(authMode === "register" ? "/api/auth/register" : "/api/auth/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ filename }),
+          body: JSON.stringify(payload),
         });
         const data = await response.json();
-        uploadMessage.textContent = data.message || "删除完成。";
+        if (!response.ok) {
+          throw new Error(data.detail || "认证失败。");
+        }
+        setToken(data.access_token);
+        renderLoggedIn(data.user);
+        messages.innerHTML = '<div class="message agent">已登录，可以开始提问。</div>';
         await loadStatus();
         await loadDocuments();
       } catch (error) {
-        uploadMessage.textContent = "删除失败，请确认本地服务仍在运行。";
+        authMessage.textContent = error.message;
+      } finally {
+        authButton.disabled = false;
       }
-    }
+    });
 
-    form.addEventListener("submit", async (event) => {
+    chatForm.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const question = input.value.trim();
-      if (!question) {
-        return;
-      }
-      if (window.location.protocol === "file:") {
-        appendMessage("agent", "请先启动 Flask 服务，并访问 http://127.0.0.1:5001 后再提问。");
-        return;
-      }
+      const question = questionInput.value.trim();
+      if (!question || !token) return;
 
       appendMessage("user", question);
-      input.value = "";
-      button.disabled = true;
-      button.textContent = "生成中";
+      questionInput.value = "";
+      sendButton.disabled = true;
+      sendButton.textContent = "生成中";
 
       try {
         const agentNode = appendMessage("agent", "");
-        const response = await fetch("/api/chat/stream", {
+        const payload = {
+          conversation_id: conversationId || null,
+          question,
+          mode: modeInput.value,
+        };
+        if (knowledgeBaseIdInput.value) {
+          payload.knowledge_base_id = Number(knowledgeBaseIdInput.value);
+        }
+        const response = await apiFetch("/api/chat/stream", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            conversation_id: conversationId,
-            question,
-            mode: currentChatMode(),
-          }),
+          body: JSON.stringify(payload),
         });
         if (!response.ok || !response.body) {
-          throw new Error("stream request failed");
+          throw new Error("请求失败。");
         }
 
         let answer = "";
@@ -811,24 +427,18 @@
         let streamedSources = [];
         const decoder = new TextDecoder();
         const reader = response.body.getReader();
-
         while (true) {
           const { value, done } = await reader.read();
-          if (done) {
-            break;
-          }
-
+          if (done) break;
           streamBuffer += decoder.decode(value, { stream: true });
           const events = streamBuffer.split("\n\n");
           streamBuffer = events.pop() || "";
-
           for (const rawEvent of events) {
             const parsedEvent = parseSseEvent(rawEvent);
-            if (!parsedEvent) {
-              continue;
-            }
+            if (!parsedEvent) continue;
             if (parsedEvent.data.conversation_id) {
-              setConversationId(parsedEvent.data.conversation_id);
+              conversationId = parsedEvent.data.conversation_id;
+              window.localStorage.setItem(conversationStorageKey, conversationId);
             }
             if (parsedEvent.event === "metadata") {
               streamedSources = parsedEvent.data.sources || streamedSources;
@@ -837,99 +447,77 @@
               renderMarkdownMessage(agentNode, answer);
               messages.scrollTop = messages.scrollHeight;
             } else if (parsedEvent.event === "error") {
-              throw new Error(parsedEvent.data.message || "stream error");
+              throw new Error(parsedEvent.data.message || "生成失败。");
             }
           }
         }
-
-        if (!answer) {
-          answer = "没有返回内容。";
-          renderMarkdownMessage(agentNode, answer);
-        }
         renderSources(agentNode, streamedSources);
       } catch (error) {
-        appendMessage("agent", "请求失败，请确认本地服务仍在运行。");
+        appendMessage("agent", error.message || "请求失败。");
       } finally {
-        button.disabled = false;
-        button.textContent = "发送";
-        input.focus();
+        sendButton.disabled = false;
+        sendButton.textContent = "发送";
+        questionInput.focus();
       }
     });
 
     uploadForm.addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (window.location.protocol === "file:") {
-        uploadMessage.textContent = "请先启动 Flask 服务，并访问 http://127.0.0.1:5001 后再上传。";
-        return;
-      }
-      if (!fileInput.files.length) {
+      if (!fileInput.files.length || !token) {
         uploadMessage.textContent = "请选择要上传的文件。";
         return;
       }
-
       const formData = new FormData();
-      Array.from(fileInput.files).forEach((file) => {
-        formData.append("files", file);
-      });
-
+      Array.from(fileInput.files).forEach((file) => formData.append("files", file));
+      const query = knowledgeBaseIdInput.value ? `?knowledge_base_id=${encodeURIComponent(knowledgeBaseIdInput.value)}` : "";
       uploadButton.disabled = true;
-      uploadButton.textContent = "入库中";
-      uploadMessage.textContent = "正在上传并构建索引，文件较多时需要等一会儿。";
-
+      uploadMessage.textContent = "正在上传并投递索引任务。";
       try {
-        const response = await fetch("/api/upload", {
+        const response = await apiFetch(`/api/knowledge/upload${query}`, {
           method: "POST",
           body: formData,
         });
         const data = await response.json();
-        uploadMessage.textContent = data.message || "上传完成。";
         if (!response.ok) {
-          return;
+          throw new Error(data.detail?.message || "上传失败。");
         }
+        if (!knowledgeBaseIdInput.value && data.knowledge_base_id) {
+          knowledgeBaseIdInput.value = data.knowledge_base_id;
+        }
+        uploadMessage.textContent = `${data.message} task_ids: ${(data.task_ids || []).join(", ")}`;
         fileInput.value = "";
-        await loadStatus();
         await loadDocuments();
       } catch (error) {
-        uploadMessage.textContent = "上传失败，请确认本地服务仍在运行。";
+        uploadMessage.textContent = error.message || "上传失败。";
       } finally {
         uploadButton.disabled = false;
-        uploadButton.textContent = "上传入库";
       }
     });
 
     function parseSseEvent(rawEvent) {
       const lines = rawEvent.split("\n");
       const eventLine = lines.find((line) => line.startsWith("event:"));
-      const dataLines = lines
-        .filter((line) => line.startsWith("data:"))
-        .map((line) => line.slice(5).trimStart());
-
-      if (!eventLine || dataLines.length === 0) {
-        return null;
-      }
-
+      const dataLines = lines.filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trimStart());
+      if (!eventLine || dataLines.length === 0) return null;
       try {
-        return {
-          event: eventLine.slice(6).trim(),
-          data: JSON.parse(dataLines.join("\n")),
-        };
+        return { event: eventLine.slice(6).trim(), data: JSON.parse(dataLines.join("\n")) };
       } catch (error) {
         return null;
       }
     }
 
-    input.addEventListener("keydown", (event) => {
+    questionInput.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
-        form.requestSubmit();
+        chatForm.requestSubmit();
       }
     });
-
+    loginTab.addEventListener("click", () => setAuthMode("login"));
+    registerTab.addEventListener("click", () => setAuthMode("register"));
+    logoutButton.addEventListener("click", clearToken);
     refreshDocumentsButton.addEventListener("click", loadDocuments);
-
-    loadStatus();
-    loadConversation();
-    loadDocuments();
+    knowledgeBaseIdInput.addEventListener("change", loadDocuments);
+    loadMe();
   </script>
 </body>
 </html>

@@ -78,9 +78,15 @@ class SimpleMemoryRetriever:
 class ChromaRetriever:
     """Retrieve relevant chunks from a local Chroma vector database."""
 
-    def __init__(self, persist_dir: str | Path, collection_name: str = COLLECTION_NAME):
+    def __init__(
+        self,
+        persist_dir: str | Path,
+        collection_name: str = COLLECTION_NAME,
+        metadata_filter: dict | None = None,
+    ):
         self.persist_dir = Path(persist_dir)
         self.collection_name = collection_name
+        self.metadata_filter = metadata_filter
         self.setup_error = ""
         self.vectorstore = None
         self.collection = None
@@ -126,7 +132,11 @@ class ChromaRetriever:
 
         chunks = []
         try:
-            results = self.vectorstore.similarity_search_with_score(query, k=top_k)
+            results = self.vectorstore.similarity_search_with_score(
+                query,
+                k=top_k,
+                filter=self.metadata_filter,
+            )
         except Exception as exc:
             self.last_vector_error = f"{exc.__class__.__name__}: {exc}"
             self.vector_disabled = True
@@ -236,6 +246,8 @@ class ChromaRetriever:
 
             for index, text in enumerate(texts):
                 metadata = metadatas[index] or {}
+                if self.metadata_filter and not metadata_matches_filter(metadata, self.metadata_filter):
+                    continue
                 if ids:
                     metadata = {"id": ids[index], **metadata}
 
@@ -365,3 +377,12 @@ def unique_queries(queries: list[str]) -> list[str]:
         seen.add(normalized)
         result.append(normalized)
     return result
+
+
+def metadata_matches_filter(metadata: dict, metadata_filter: dict) -> bool:
+    if "$and" in metadata_filter:
+        return all(metadata_matches_filter(metadata, item) for item in metadata_filter["$and"])
+    for key, expected in metadata_filter.items():
+        if str(metadata.get(key)) != str(expected):
+            return False
+    return True

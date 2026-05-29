@@ -1,6 +1,7 @@
 import argparse
 import hashlib
 import json
+import logging
 from pathlib import Path
 from typing import TypeVar
 
@@ -20,6 +21,7 @@ PARENT_STORE_PATH = VECTOR_STORE_DIR / "parent_store.json"
 EMBEDDING_MODEL = configured_embedding_model_name()
 INDEX_VERSION = 2
 T = TypeVar("T")
+logger = logging.getLogger(__name__)
 
 
 def build_documents(chunk_size: int, chunk_overlap: int) -> list[Document]:
@@ -48,6 +50,9 @@ def build_documents_for_file(
     file_path: Path,
     chunk_size: int,
     chunk_overlap: int,
+    user_id: int | None = None,
+    knowledge_base_id: int | None = None,
+    document_id: int | None = None,
 ) -> tuple[list[Document], dict[str, dict]]:
     """Load one file and split it into chapter-aware LangChain documents."""
     pages = []
@@ -76,6 +81,9 @@ def build_documents_for_file(
             page_content=chunk["text"],
             metadata={
                 "id": chunk["id"],
+                "user_id": user_id or 0,
+                "knowledge_base_id": knowledge_base_id or 0,
+                "document_id": document_id or 0,
                 **chunk["metadata"],
             },
         )
@@ -138,7 +146,12 @@ def build_parent_entries(sections: list[dict]) -> dict[str, dict]:
     return parents
 
 
-def get_chroma_vectorstore(rebuild: bool = False):
+def get_chroma_vectorstore(
+    rebuild: bool = False,
+    *,
+    vector_store_dir: Path = VECTOR_STORE_DIR,
+    collection_name: str = COLLECTION_NAME,
+):
     """Create a LangChain Chroma vector store for the current knowledge base."""
     try:
         import chromadb
@@ -146,18 +159,18 @@ def get_chroma_vectorstore(rebuild: bool = False):
     except ImportError as exc:
         raise RuntimeError("请先运行 pip install -r requirements.txt 安装 LangChain 和 Chroma。") from exc
 
-    VECTOR_STORE_DIR.mkdir(parents=True, exist_ok=True)
-    client = chromadb.PersistentClient(path=str(VECTOR_STORE_DIR))
+    vector_store_dir.mkdir(parents=True, exist_ok=True)
+    client = chromadb.PersistentClient(path=str(vector_store_dir))
 
     if rebuild:
         try:
-            client.delete_collection(name=COLLECTION_NAME)
+            client.delete_collection(name=collection_name)
         except Exception:
             pass
 
     return Chroma(
         client=client,
-        collection_name=COLLECTION_NAME,
+        collection_name=collection_name,
         embedding_function=get_embeddings(),
         collection_metadata={
             "embedding_model": EMBEDDING_MODEL,
@@ -170,26 +183,36 @@ def build_index(
     chunk_overlap: int = 80,
     batch_size: int = 16,
     rebuild: bool = False,
+    *,
+    data_dir: Path = DATA_DIR,
+    vector_store_dir: Path = VECTOR_STORE_DIR,
+    user_id: int | None = None,
+    knowledge_base_id: int | None = None,
+    document_id: int | None = None,
+    collection_name: str | None = None,
 ) -> bool:
     """Build a local Chroma vector index under vector_store/."""
     try:
         import chromadb  # noqa: F401
         import langchain_chroma  # noqa: F401
     except ImportError:
-        print("索引写入失败：请先运行 pip install -r requirements.txt 安装 LangChain 和 Chroma。")
+        logger.error("索引写入失败：请先运行 pip install -r requirements.txt 安装 LangChain 和 Chroma。")
         return False
 
-    has_manifest = MANIFEST_PATH.exists()
-    manifest = load_manifest()
-    files = discover_knowledge_files(DATA_DIR)
+    collection_name = collection_name or COLLECTION_NAME
+    manifest_path = vector_store_dir / "index_manifest.json"
+    parent_store_path = vector_store_dir / "parent_store.json"
+    has_manifest = manifest_path.exists()
+    manifest = load_manifest(manifest_path)
+    files = discover_knowledge_files(data_dir)
     if not files and not manifest.get("files"):
         supported_formats = "、".join(sorted(SUPPORTED_EXTENSIONS))
-        print(f"没有找到可索引的知识库文件。请先把 {supported_formats} 文件放入 data/ 目录。")
+        logger.warning("没有找到可索引的知识库文件。请先把 %s 文件放入 data/ 目录。", supported_formats)
         return False
 
     if not has_manifest:
         rebuild = True
-    if manifest.get("files") and not PARENT_STORE_PATH.exists():
+    if manifest.get("files") and not parent_store_path.exists():
         rebuild = True
         manifest = empty_manifest(chunk_size, chunk_overlap)
     if should_rebuild_manifest(manifest, chunk_size, chunk_overlap):
@@ -197,15 +220,19 @@ def build_index(
         manifest = empty_manifest(chunk_size, chunk_overlap)
     elif rebuild:
         manifest = empty_manifest(chunk_size, chunk_overlap)
-    parent_store = empty_parent_store() if rebuild else load_parent_store()
+    parent_store = empty_parent_store() if rebuild else load_parent_store(parent_store_path)
 
     try:
-        vectorstore = get_chroma_vectorstore(rebuild=rebuild)
+        vectorstore = get_chroma_vectorstore(
+            rebuild=rebuild,
+            vector_store_dir=vector_store_dir,
+            collection_name=collection_name,
+        )
     except RuntimeError as exc:
-        print(f"索引写入失败：{exc}")
+        logger.error("索引写入失败：%s", exc)
         return False
 
-    current_file_keys = {relative_file_key(file_path) for file_path in files}
+    current_file_keys = {relative_file_key(file_path, data_dir) for file_path in files}
     previous_file_keys = set(manifest.get("files", {}))
     deleted_file_keys = sorted(previous_file_keys - current_file_keys)
 
@@ -215,12 +242,12 @@ def build_index(
         delete_documents(vectorstore, chunk_ids)
         remove_parent_entries(parent_store, file_entry.get("parent_ids", []))
         manifest["files"].pop(file_key, None)
-        print(f"已从索引删除失效文件：{file_key}，移除 {len(chunk_ids)} 个文本块。")
+        logger.info("已从索引删除失效文件：%s，移除 %s 个文本块。", file_key, len(chunk_ids))
 
     changed_files = []
     unchanged_count = 0
     for file_path in files:
-        file_key = relative_file_key(file_path)
+        file_key = relative_file_key(file_path, data_dir)
         file_hash = hash_file(file_path)
         previous = manifest.get("files", {}).get(file_key)
         if previous and previous.get("hash") == file_hash:
@@ -229,13 +256,15 @@ def build_index(
         changed_files.append((file_path, file_key, file_hash, previous))
 
     if not changed_files and not deleted_file_keys:
-        print(f"索引已是最新状态：{len(files)} 个文件未变化。")
-        save_manifest(manifest, chunk_size, chunk_overlap)
+        logger.info("索引已是最新状态：%s 个文件未变化。", len(files))
+        save_manifest(manifest, chunk_size, chunk_overlap, manifest_path)
         return True
 
-    print(
-        f"索引增量更新：新增/修改 {len(changed_files)} 个文件，"
-        f"删除 {len(deleted_file_keys)} 个文件，跳过 {unchanged_count} 个未变化文件。"
+    logger.info(
+        "索引增量更新：新增/修改 %s 个文件，删除 %s 个文件，跳过 %s 个未变化文件。",
+        len(changed_files),
+        len(deleted_file_keys),
+        unchanged_count,
     )
 
     for file_path, file_key, file_hash, previous in changed_files:
@@ -248,17 +277,20 @@ def build_index(
                 file_path,
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,
+                user_id=user_id,
+                knowledge_base_id=knowledge_base_id,
+                document_id=document_id,
             )
         except RuntimeError as exc:
-            print(f"文档读取失败：{file_key}：{exc}")
+            logger.error("文档读取失败：%s：%s", file_key, exc)
             return False
 
         if not documents:
             manifest["files"].pop(file_key, None)
-            print(f"跳过空文档：{file_key}")
+            logger.info("跳过空文档：%s", file_key)
             continue
 
-        print(f"正在更新文件：{file_key}，切分出 {len(documents)} 个文本块。")
+        logger.info("正在更新文件：%s，切分出 %s 个文本块。", file_key, len(documents))
         if not add_documents(vectorstore, documents, batch_size):
             return False
 
@@ -271,27 +303,27 @@ def build_index(
             "chunk_count": len(documents),
         }
 
-    save_parent_store(parent_store)
-    save_manifest(manifest, chunk_size, chunk_overlap)
-    print(f"Chroma 索引增量更新完成：{VECTOR_STORE_DIR}")
+    save_parent_store(parent_store, parent_store_path)
+    save_manifest(manifest, chunk_size, chunk_overlap, manifest_path)
+    logger.info("Chroma 索引增量更新完成：%s", vector_store_dir)
     return True
 
 
 def add_documents(vectorstore, documents: list[Document], batch_size: int) -> bool:
     for batch_number, document_batch in enumerate(batch_items(documents, batch_size), start=1):
-        print(f"正在写入第 {batch_number} 批，共 {len(document_batch)} 个文本块...")
+        logger.info("正在写入第 %s 批，共 %s 个文本块...", batch_number, len(document_batch))
         try:
             vectorstore.add_documents(
                 documents=document_batch,
                 ids=[document.metadata["id"] for document in document_batch],
             )
         except RuntimeError as exc:
-            print(f"向量化失败：{exc}")
-            print("请确认本地 Ollama 服务已启动，或在 .env 中配置正确的模型供应商。")
+            logger.error("向量化失败：%s", exc)
+            logger.error("请确认本地 Ollama 服务已启动，或在 .env 中配置正确的模型供应商。")
             return False
         except UnicodeEncodeError as exc:
-            print(f"向量化失败：知识库文本中包含无法编码的特殊字符，已停止写入。错误：{exc}")
-            print("请重新运行 python build_index.py，程序会在入库前清理这类字符。")
+            logger.error("向量化失败：知识库文本中包含无法编码的特殊字符，已停止写入。错误：%s", exc)
+            logger.error("请重新运行 python build_index.py，程序会在入库前清理这类字符。")
             return False
 
     return True
@@ -303,7 +335,7 @@ def delete_documents(vectorstore, chunk_ids: list[str]) -> None:
     try:
         vectorstore.delete(ids=chunk_ids)
     except Exception as exc:
-        print(f"删除旧文本块时出现警告：{exc}")
+        logger.warning("删除旧文本块时出现警告：%s", exc)
 
 
 def discover_knowledge_files(data_dir: Path) -> list[Path]:
@@ -324,31 +356,31 @@ def hash_file(file_path: Path) -> str:
     return digest.hexdigest()
 
 
-def relative_file_key(file_path: Path) -> str:
-    return file_path.relative_to(DATA_DIR).as_posix()
+def relative_file_key(file_path: Path, data_dir: Path = DATA_DIR) -> str:
+    return file_path.relative_to(data_dir).as_posix()
 
 
-def load_manifest() -> dict:
-    if not MANIFEST_PATH.exists():
+def load_manifest(manifest_path: Path = MANIFEST_PATH) -> dict:
+    if not manifest_path.exists():
         return empty_manifest()
     try:
-        return json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        return json.loads(manifest_path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return empty_manifest()
 
 
-def load_parent_store() -> dict:
-    if not PARENT_STORE_PATH.exists():
+def load_parent_store(parent_store_path: Path = PARENT_STORE_PATH) -> dict:
+    if not parent_store_path.exists():
         return empty_parent_store()
     try:
-        return json.loads(PARENT_STORE_PATH.read_text(encoding="utf-8"))
+        return json.loads(parent_store_path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return empty_parent_store()
 
 
-def save_parent_store(parent_store: dict) -> None:
-    VECTOR_STORE_DIR.mkdir(parents=True, exist_ok=True)
-    PARENT_STORE_PATH.write_text(
+def save_parent_store(parent_store: dict, parent_store_path: Path = PARENT_STORE_PATH) -> None:
+    parent_store_path.parent.mkdir(parents=True, exist_ok=True)
+    parent_store_path.write_text(
         json.dumps(parent_store, ensure_ascii=False, indent=2, sort_keys=True),
         encoding="utf-8",
     )
@@ -366,13 +398,18 @@ def remove_parent_entries(parent_store: dict, parent_ids: list[str]) -> None:
         parent_store.get("parents", {}).pop(parent_id, None)
 
 
-def save_manifest(manifest: dict, chunk_size: int, chunk_overlap: int) -> None:
-    VECTOR_STORE_DIR.mkdir(parents=True, exist_ok=True)
+def save_manifest(
+    manifest: dict,
+    chunk_size: int,
+    chunk_overlap: int,
+    manifest_path: Path = MANIFEST_PATH,
+) -> None:
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest["index_version"] = INDEX_VERSION
     manifest["chunk_size"] = chunk_size
     manifest["chunk_overlap"] = chunk_overlap
     manifest["embedding_model"] = EMBEDDING_MODEL
-    MANIFEST_PATH.write_text(
+    manifest_path.write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True),
         encoding="utf-8",
     )
@@ -413,6 +450,7 @@ def parse_args() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
     args = parse_args()
     build_index(
         chunk_size=args.chunk_size,

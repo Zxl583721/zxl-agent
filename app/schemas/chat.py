@@ -6,8 +6,7 @@ from pydantic import BaseModel, Field
 class ChatRequest(BaseModel):
     question: str = Field(..., min_length=1, description="User question")
     conversation_id: str | None = Field(default=None, description="Optional conversation id")
-    user_id: int = Field(default=1, ge=1, description="Temporary user id before auth is added")
-    knowledge_base_id: int = Field(default=1, ge=1, description="Knowledge base id")
+    knowledge_base_id: int | None = Field(default=None, ge=1, description="Knowledge base id")
     mode: Literal["knowledge", "general", "chat"] = Field(default="knowledge")
 
 
@@ -23,8 +22,8 @@ class Source(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     conversation_id: str
-    user_id: int = 1
-    knowledge_base_id: int = 1
+    user_id: int
+    knowledge_base_id: int
     mode: str = "knowledge"
     cache_hit: bool = False
     cache_key: str | None = None
