@@ -11,6 +11,11 @@ def get_chat_model(**kwargs):
 
         model_kwargs = {"model_name": LLM_MODEL, **kwargs} if LLM_MODEL else kwargs
         return ZhipuChatModel(**model_kwargs)
+    if LLM_PROVIDER == "deepseek":
+        from src.langchain_deepseek import DeepSeekChatModel
+
+        model_kwargs = {"model_name": LLM_MODEL, **kwargs} if LLM_MODEL else kwargs
+        return DeepSeekChatModel(**model_kwargs)
     raise ValueError(f"不支持的 LLM_PROVIDER：{LLM_PROVIDER}")
 
 

@@ -23,6 +23,25 @@ ollama pull qwen3:8b
 ollama pull bge-m3
 ```
 
+如需把回答生成模型切到 DeepSeek，在 `.env` 中配置：
+
+```bash
+LLM_PROVIDER=deepseek
+LLM_MODEL=deepseek-chat
+DEEPSEEK_API_KEY=你的_deepseek_api_key
+DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+
+# 知识库向量化仍保留 Ollama embedding
+EMBEDDING_PROVIDER=ollama
+EMBEDDING_MODEL=bge-m3
+```
+
+修改 `.env` 后重启服务：
+
+```bash
+docker compose up -d --build
+```
+
 ## 启动
 
 推荐用 Docker Compose 分开启动 API、MySQL、Redis 和 Celery worker：

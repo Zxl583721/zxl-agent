@@ -1,5 +1,6 @@
 import re
 
+from config import LLM_MODEL, LLM_PROVIDER
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -378,11 +379,17 @@ class RAGAgent:
 
     @staticmethod
     def _build_general_chain():
+        provider_name = LLM_PROVIDER or "unknown"
+        model_name = LLM_MODEL or "unknown"
         prompt = ChatPromptTemplate.from_messages(
             [
                 (
                     "system",
-                    """你是 zxl-agent 项目的中文通用聊天助手。
+                    f"""你是一个通用聊天助手。
+当前后端配置的聊天模型提供方是：{provider_name}。
+当前后端配置的聊天模型名称是：{model_name}。
+直接回答用户当前问题，不要自称属于某个项目、产品或平台。
+如果用户询问你使用的具体模型，可以基于上述后端配置直接回答；不要声称无法确认。
 你可以根据自身通用知识回答问题，不需要检索知识库。
 如果问题涉及不确定、实时变化或高风险内容，请说明不确定性，并建议用户核验最新或专业信息。
 默认使用中文回答，表达清晰、直接。""",
