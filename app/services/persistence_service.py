@@ -114,6 +114,7 @@ class PersistenceService:
                     "chunk_count": document.chunk_count,
                     "hash": document.file_hash[:12],
                     "knowledge_base_id": document.knowledge_base_id,
+                    "error_message": document.error_message,
                     "created_at": document.created_at.isoformat() if document.created_at else None,
                 }
                 for document in documents
@@ -151,6 +152,46 @@ class PersistenceService:
     def get_document(self, document_id: int, user_id: int) -> Document | None:
         with SessionLocal() as db:
             return db.scalar(select(Document).where(Document.id == document_id, Document.user_id == user_id))
+
+    def delete_document(self, *, document_id: int, user_id: int) -> dict | None:
+        try:
+            with SessionLocal() as db:
+                document = db.scalar(select(Document).where(Document.id == document_id, Document.user_id == user_id))
+                if document is None:
+                    return None
+                result = {
+                    "id": document.id,
+                    "filename": document.filename,
+                    "file_path": document.file_path,
+                    "knowledge_base_id": document.knowledge_base_id,
+                }
+                tasks = db.scalars(
+                    select(TaskRecord).where(TaskRecord.document_id == document.id, TaskRecord.user_id == user_id)
+                ).all()
+                for task in tasks:
+                    task.document_id = None
+                db.delete(document)
+                db.commit()
+                return result
+        except SQLAlchemyError:
+            logger.exception("Failed to delete document document_id=%s", document_id)
+            return None
+
+    def reset_document_for_indexing(self, *, document_id: int, user_id: int) -> Document | None:
+        try:
+            with SessionLocal() as db:
+                document = db.scalar(select(Document).where(Document.id == document_id, Document.user_id == user_id))
+                if document is None:
+                    return None
+                document.status = DocumentStatus.PENDING.value
+                document.error_message = None
+                document.chunk_count = 0
+                db.commit()
+                db.refresh(document)
+                return document
+        except SQLAlchemyError:
+            logger.exception("Failed to reset document document_id=%s", document_id)
+            return None
 
     def create_task_record(
         self,

@@ -8,8 +8,8 @@ class TaskStatusResponse(BaseModel):
     document_id: int | None = None
     user_id: int | None = None
     knowledge_base_id: int | None = None
+    chunk_count: int | None = None
     error_message: str | None = None
     redis_cached: bool = False
     created_at: str | None = None
     updated_at: str | None = None
-

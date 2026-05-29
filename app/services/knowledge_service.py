@@ -5,18 +5,20 @@ from uuid import uuid4
 from fastapi import UploadFile
 
 from app.core.config import get_settings
-from app.models import TaskStatus
+from app.models import DocumentStatus, TaskStatus
 from app.services.persistence_service import persistence_service
 from app.services.redis_service import redis_service
 from app.tasks.document_tasks import index_document
 from app.utils.files import (
     is_safe_child_path,
+    kb_collection_name,
     sanitize_filename,
     tenant_data_dir,
+    tenant_vector_dir,
     validate_upload_file,
     write_upload_to_temp,
 )
-from build_index import hash_file
+from build_index import delete_documents, get_chroma_vectorstore, hash_file, load_manifest, save_manifest
 from src.document_loader import SUPPORTED_EXTENSIONS
 
 
@@ -31,6 +33,76 @@ class KnowledgeService:
             page=page,
             page_size=page_size,
         )
+
+    def delete_document(self, *, user_id: int, document_id: int) -> dict | None:
+        document = persistence_service.delete_document(document_id=document_id, user_id=user_id)
+        if document is None:
+            return None
+
+        knowledge_base_id = int(document["knowledge_base_id"])
+        file_path = Path(str(document["file_path"]))
+        target_dir = tenant_data_dir(user_id, knowledge_base_id)
+        if is_safe_child_path(file_path, target_dir) and file_path.exists():
+            file_path.unlink()
+
+        manifest_path = tenant_vector_dir(knowledge_base_id) / "index_manifest.json"
+        manifest = load_manifest(manifest_path)
+        file_entry = manifest.get("files", {}).pop(document["filename"], None)
+        if file_entry:
+            try:
+                vectorstore = get_chroma_vectorstore(
+                    vector_store_dir=tenant_vector_dir(knowledge_base_id),
+                    collection_name=kb_collection_name(knowledge_base_id),
+                )
+                delete_documents(vectorstore, file_entry.get("chunk_ids", []))
+                save_manifest(manifest, manifest.get("chunk_size") or 400, manifest.get("chunk_overlap") or 80, manifest_path)
+            except Exception:
+                pass
+
+        return {
+            "message": f"已删除文档：{document['filename']}。",
+            "document_id": document_id,
+            "filename": document["filename"],
+            "knowledge_base_id": knowledge_base_id,
+        }
+
+    def reindex_document(self, *, user_id: int, document_id: int) -> dict | None:
+        document = persistence_service.reset_document_for_indexing(document_id=document_id, user_id=user_id)
+        if document is None:
+            return None
+
+        file_path = Path(document.file_path)
+        if not file_path.exists():
+            persistence_service.update_document_status(
+                document_id,
+                status=DocumentStatus.FAILED,
+                user_id=user_id,
+                error_message="File is missing from storage.",
+            )
+            return None
+
+        task_id = uuid4().hex
+        task_id = persistence_service.create_task_record(
+            task_type="document_index",
+            document_id=document.id,
+            user_id=user_id,
+            knowledge_base_id=document.knowledge_base_id,
+            task_id=task_id,
+        )
+        if task_id:
+            payload = {
+                "document_id": document.id,
+                "filename": document.filename,
+                "task_type": "document_index",
+                "user_id": user_id,
+                "knowledge_base_id": document.knowledge_base_id,
+            }
+            redis_service.set_task_status(task_id, TaskStatus.PENDING.value, payload)
+            index_document.apply_async(
+                args=[task_id, document.id, document.filename, user_id, document.knowledge_base_id],
+                task_id=task_id,
+            )
+        return {"message": "已重新投递索引任务。", "document_id": document.id, "task_id": task_id}
 
     def save_and_index_files(
         self,

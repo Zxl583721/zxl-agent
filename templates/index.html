@@ -92,6 +92,10 @@
     .document-item { border-top: 1px solid var(--line); padding-top: 8px; }
     .document-name { margin: 0 0 4px; font-size: 13px; overflow-wrap: anywhere; }
     .document-meta { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .document-error { margin: 4px 0 0; color: var(--danger); font-size: 12px; line-height: 1.45; }
+    .document-actions { display: flex; gap: 8px; margin-top: 8px; }
+    .document-actions button { min-height: 30px; padding: 0 10px; font-size: 12px; }
+    .document-actions button.danger { color: var(--danger); border-color: #fecaca; }
     .hidden { display: none !important; }
     @media (max-width: 860px) {
       .app { grid-template-columns: 1fr; }
@@ -259,6 +263,9 @@
       uploadPanel.classList.remove("hidden");
       documentsPanel.classList.remove("hidden");
       currentUser.textContent = `${user.display_name || user.username}（ID ${user.id}）`;
+      if (messages.textContent.includes("请先登录或注册账号。")) {
+        messages.innerHTML = '<div class="message agent">已登录，可以开始提问。</div>';
+      }
     }
 
     function appendMessage(role, text) {
@@ -348,9 +355,16 @@
           item.innerHTML = `
             <p class="document-name"></p>
             <p class="document-meta"></p>
+            <p class="document-error"></p>
+            <div class="document-actions">
+              <button type="button" data-action="reindex">重试索引</button>
+              <button type="button" class="danger" data-action="delete">删除</button>
+            </div>
           `;
+          item.dataset.documentId = documentItem.id;
           item.querySelector(".document-name").textContent = documentItem.filename;
           item.querySelector(".document-meta").textContent = `状态：${documentItem.status}，分块：${documentItem.chunk_count}，hash：${documentItem.hash}`;
+          item.querySelector(".document-error").textContent = documentItem.error_message || "";
           documentList.appendChild(item);
         }
       } catch (error) {
@@ -487,6 +501,7 @@
         uploadMessage.textContent = `${data.message} task_ids: ${(data.task_ids || []).join(", ")}`;
         fileInput.value = "";
         await loadDocuments();
+        await pollTasks(data.task_ids || []);
       } catch (error) {
         uploadMessage.textContent = error.message || "上传失败。";
       } finally {
@@ -505,6 +520,72 @@
         return null;
       }
     }
+
+    async function pollTasks(taskIds) {
+      if (!taskIds.length) return;
+      const pending = new Set(taskIds);
+      for (let attempt = 0; attempt < 60 && pending.size; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, attempt < 3 ? 1000 : 2500));
+        for (const taskId of Array.from(pending)) {
+          try {
+            const response = await apiFetch(`/api/tasks/${encodeURIComponent(taskId)}`);
+            if (!response.ok) continue;
+            const task = await response.json();
+            if (task.status === "completed") {
+              pending.delete(taskId);
+              uploadMessage.textContent = `索引完成：文档 ${task.document_id}，分块 ${task.chunk_count || 0}。`;
+              await loadDocuments();
+            } else if (task.status === "failed") {
+              pending.delete(taskId);
+              uploadMessage.textContent = `索引失败：${task.error_message || "请查看 worker 日志。"}`;
+              await loadDocuments();
+            } else {
+              uploadMessage.textContent = `索引中：${pending.size} 个任务仍在处理。`;
+            }
+          } catch (error) {
+            uploadMessage.textContent = "任务状态读取失败。";
+          }
+        }
+      }
+      if (pending.size) {
+        uploadMessage.textContent = "索引仍在后台处理中，稍后刷新文档列表查看结果。";
+      }
+    }
+
+    documentList.addEventListener("click", async (event) => {
+      const button = event.target.closest("button[data-action]");
+      if (!button) return;
+      const item = button.closest(".document-item");
+      const documentId = item?.dataset.documentId;
+      if (!documentId) return;
+      button.disabled = true;
+      try {
+        if (button.dataset.action === "delete") {
+          if (!window.confirm("确定删除这个文档吗？")) return;
+          const response = await apiFetch(`/api/knowledge/documents/${encodeURIComponent(documentId)}`, {
+            method: "DELETE",
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.detail || "删除失败。");
+          uploadMessage.textContent = data.message || "删除完成。";
+          await loadDocuments();
+          return;
+        }
+
+        const response = await apiFetch(`/api/knowledge/documents/${encodeURIComponent(documentId)}/reindex`, {
+          method: "POST",
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "重试失败。");
+        uploadMessage.textContent = data.message || "已重新投递索引任务。";
+        await loadDocuments();
+        if (data.task_id) await pollTasks([data.task_id]);
+      } catch (error) {
+        uploadMessage.textContent = error.message || "操作失败。";
+      } finally {
+        button.disabled = false;
+      }
+    });
 
     questionInput.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.shiftKey) {

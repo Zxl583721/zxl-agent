@@ -23,7 +23,12 @@ from app.db.session import get_db
 from app.models import KnowledgeBase, User
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.schemas.health import HealthResponse
-from app.schemas.knowledge import DocumentListResponse, KnowledgeUploadResponse
+from app.schemas.knowledge import (
+    DocumentListResponse,
+    KnowledgeDeleteResponse,
+    KnowledgeReindexResponse,
+    KnowledgeUploadResponse,
+)
 from app.schemas.task import TaskStatusResponse
 from app.services.knowledge_service import KnowledgeService, get_knowledge_service
 from app.services.persistence_service import PersistenceService, get_persistence_service
@@ -282,6 +287,38 @@ def list_documents(
         page=page,
         page_size=page_size,
     )
+
+
+@router.delete(
+    "/api/knowledge/documents/{document_id}",
+    response_model=KnowledgeDeleteResponse,
+    tags=["知识库"],
+)
+def delete_document(
+    document_id: int,
+    current_user: User = Depends(get_current_user),
+    knowledge: KnowledgeService = Depends(get_knowledge_service),
+) -> dict:
+    result = knowledge.delete_document(user_id=current_user.id, document_id=document_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="文档不存在或无权访问。")
+    return result
+
+
+@router.post(
+    "/api/knowledge/documents/{document_id}/reindex",
+    response_model=KnowledgeReindexResponse,
+    tags=["知识库"],
+)
+def reindex_document(
+    document_id: int,
+    current_user: User = Depends(get_current_user),
+    knowledge: KnowledgeService = Depends(get_knowledge_service),
+) -> dict:
+    result = knowledge.reindex_document(user_id=current_user.id, document_id=document_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="文档不存在、无权访问或文件已丢失。")
+    return result
 
 
 @router.get(

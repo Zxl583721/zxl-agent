@@ -56,14 +56,14 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change_me_to_a_32_plus_char_random_secret}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
-      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-change_me_or_leave_empty_for_local_only}@redis:6379/0
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-change_me_or_leave_empty_for_local_only}@redis:6379/0
       LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
-      LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
+      LLM_BASE_URL: http://host.docker.internal:11434/v1
       LLM_API_KEY: ${LLM_API_KEY:-ollama}
       LLM_MODEL: ${LLM_MODEL:-qwen3:8b}
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-ollama}
-      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://host.docker.internal:11434}
+      EMBEDDING_BASE_URL: http://host.docker.internal:11434
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-bge-m3}
       ZHIPUAI_API_KEY: ${ZHIPUAI_API_KEY:-}
     command: sh -c "python scripts/init_db.py && uvicorn app.main:app --host 0.0.0.0 --port 8000"
