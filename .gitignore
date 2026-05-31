@@ -11,5 +11,6 @@ env/
 vector_store/*
 !vector_store/.gitkeep
 conversation_store.sqlite3*
+models/
 
 .DS_Store
