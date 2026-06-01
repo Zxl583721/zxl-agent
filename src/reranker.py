@@ -1,6 +1,7 @@
 import math
 import re
 from collections import Counter
+from pathlib import Path
 
 
 LATIN_TOKEN_PATTERN = re.compile(r"[a-zA-Z0-9_]+")
@@ -96,6 +97,57 @@ class LightweightReranker:
         if any(marker in source_text for marker in OUTLINE_SOURCE_MARKERS):
             return self.outline_penalty
         return 0.0
+
+
+class BGEReranker:
+    """Cross-encoder reranker backed by BAAI/bge-reranker-v2-m3."""
+
+    def __init__(
+        self,
+        model_path: str | Path = "models/bge-reranker-v2-m3",
+        *,
+        use_fp16: bool = False,
+        batch_size: int = 8,
+    ):
+        self.model_path = str(model_path)
+        self.batch_size = batch_size
+        try:
+            from FlagEmbedding import FlagReranker
+        except ImportError as exc:
+            raise RuntimeError(
+                "未安装 FlagEmbedding。请运行 ./.conda/bin/python -m pip install FlagEmbedding transformers torch"
+            ) from exc
+
+        if not Path(self.model_path).exists():
+            raise RuntimeError(f"BGE reranker 模型目录不存在：{self.model_path}")
+
+        self.model = FlagReranker(self.model_path, use_fp16=use_fp16)
+
+    def rerank(self, query: str, chunks: list[dict], top_k: int) -> list[dict]:
+        if not chunks or top_k <= 0:
+            return []
+
+        pairs = [[query, chunk.get("text", "")] for chunk in chunks]
+        scores = self.model.compute_score(pairs, batch_size=self.batch_size)
+        if isinstance(scores, (float, int)):
+            scores = [float(scores)]
+
+        scored_chunks = []
+        for index, (chunk, score) in enumerate(zip(chunks, scores), start=1):
+            rerank_score = float(score)
+            scored_chunks.append(
+                (
+                    rerank_score,
+                    {
+                        **chunk,
+                        "retrieval_rank": index,
+                        "bge_rerank_score": rerank_score,
+                    },
+                )
+            )
+
+        scored_chunks.sort(key=lambda item: item[0], reverse=True)
+        return [chunk for _, chunk in scored_chunks[:top_k]]
 
 
 def tokenize(text: str) -> Counter:

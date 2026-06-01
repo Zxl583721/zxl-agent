@@ -6,7 +6,7 @@ import time
 from eval_utils import PROJECT_ROOT, case_relevant_ids, chunk_id, init_retriever, load_json_or_jsonl
 from metrics import mrr_at_k, ndcg_at_k, precision_at_k, recall_at_k, safe_mean
 from src.query_expander import expand_keyword_queries
-from src.reranker import LightweightReranker
+from src.reranker import BGEReranker, LightweightReranker
 
 
 DEFAULT_QUERIES = Path(__file__).with_name("retrieval_cases.jsonl")
@@ -17,11 +17,19 @@ CONFIGS = (
     ("vector", "纯向量"),
     ("hybrid", "向量+BM25+RRF"),
     ("hybrid_expanded", "向量+BM25+RRF+QueryExp"),
-    ("full", "向量+BM25+RRF+QueryExp+Rerank"),
+    ("full", "向量+BM25+RRF+QueryExp+LightRerank"),
+    ("bge", "向量+BM25+RRF+QueryExp+BGERerank"),
 )
 
 
-def retrieve_by_config(retriever, query: str, config: str, top_k: int, candidate_k: int) -> list[dict]:
+def retrieve_by_config(
+    retriever,
+    query: str,
+    config: str,
+    top_k: int,
+    candidate_k: int,
+    rerankers: dict,
+) -> list[dict]:
     if config == "vector":
         return retriever._vector_retrieve(query, top_k)
     if config == "hybrid":
@@ -34,18 +42,39 @@ def retrieve_by_config(retriever, query: str, config: str, top_k: int, candidate
             top_k=max(candidate_k, top_k),
             keyword_queries=expand_keyword_queries(query),
         )
-        return LightweightReranker().rerank(query, chunks, top_k=top_k)
+        return rerankers["lightweight"].rerank(query, chunks, top_k=top_k)
+    if config == "bge":
+        chunks = retriever.retrieve(
+            query,
+            top_k=max(candidate_k, top_k),
+            keyword_queries=expand_keyword_queries(query),
+        )
+        return rerankers["bge"].rerank(query, chunks, top_k=top_k)
     raise ValueError(f"未知配置：{config}")
 
 
-def evaluate_config(retriever, cases: list[dict], config: str, top_k: int, candidate_k: int) -> dict:
+def evaluate_config(
+    retriever,
+    cases: list[dict],
+    config: str,
+    top_k: int,
+    candidate_k: int,
+    rerankers: dict,
+) -> dict:
     rows = []
     elapsed_ms = []
 
     for case in cases:
         query = str(case["query"]).strip()
         started = time.perf_counter()
-        chunks = retrieve_by_config(retriever, query, config, top_k=top_k, candidate_k=candidate_k)
+        chunks = retrieve_by_config(
+            retriever,
+            query,
+            config,
+            top_k=top_k,
+            candidate_k=candidate_k,
+            rerankers=rerankers,
+        )
         elapsed_ms.append((time.perf_counter() - started) * 1000)
 
         retrieved_ids = [chunk_id(chunk) for chunk in chunks]
@@ -108,11 +137,13 @@ def print_summary(results: list[dict], top_k: int, verbose: bool) -> None:
             f"{result['mrr']:>8.2%} {result['ndcg']:>8.2%} {result['latency_ms']:>9.1f}"
         )
 
-    full = next((item for item in results if item["config"] == "full"), None)
-    if full:
-        print("\nFull 配置按问题类型")
+    for grouped_config in ("full", "bge"):
+        grouped_result = next((item for item in results if item["config"] == grouped_config), None)
+        if not grouped_result:
+            continue
+        print(f"\n{dict(CONFIGS)[grouped_config]} 按问题类型")
         print("-" * 60)
-        for query_type, item in full["by_type"].items():
+        for query_type, item in grouped_result["by_type"].items():
             print(
                 f"{query_type:<20} n={item['n']:<3} "
                 f"Recall={item['recall']:.2%} MRR={item['mrr']:.2%} NDCG={item['ndcg']:.2%}"
@@ -122,7 +153,7 @@ def print_summary(results: list[dict], top_k: int, verbose: bool) -> None:
         print("\n未命中或低召回样例")
         print("-" * 60)
         for result in results:
-            if result["config"] != "full":
+            if result["config"] != "bge":
                 continue
             for row in result["rows"]:
                 if row["recall"] < 1.0:
@@ -138,6 +169,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--collection-name", default="", help="Chroma collection 名称，默认使用项目配置。")
     parser.add_argument("--top-k", type=int, default=5, help="计算 Recall/MRR/NDCG 的 K。")
     parser.add_argument("--candidate-k", type=int, default=20, help="Reranker 前召回候选数。")
+    parser.add_argument("--bge-model", type=Path, default=PROJECT_ROOT / "models/bge-reranker-v2-m3")
+    parser.add_argument("--bge-batch-size", type=int, default=8)
     parser.add_argument("--verbose", "-v", action="store_true", help="打印低召回样例。")
     return parser.parse_args()
 
@@ -150,8 +183,19 @@ def main() -> int:
         return 1
 
     retriever = init_retriever(args.vector_dir, args.collection_name or None)
+    rerankers = {
+        "lightweight": LightweightReranker(),
+        "bge": BGEReranker(args.bge_model, use_fp16=False, batch_size=args.bge_batch_size),
+    }
     results = [
-        evaluate_config(retriever, cases, config, top_k=args.top_k, candidate_k=args.candidate_k)
+        evaluate_config(
+            retriever,
+            cases,
+            config,
+            top_k=args.top_k,
+            candidate_k=args.candidate_k,
+            rerankers=rerankers,
+        )
         for config, _ in CONFIGS
     ]
     print_summary(results, top_k=args.top_k, verbose=args.verbose)
