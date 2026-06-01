@@ -1,4 +1,4 @@
-def split_text(text: str, chunk_size: int = 800, chunk_overlap: int = 100) -> list[str]:
+def split_text(text: str, chunk_size: int = 400, chunk_overlap: int = 80) -> list[str]:
     """Split text into overlapping chunks using LangChain's recursive splitter."""
     if chunk_size <= 0:
         raise ValueError("chunk_size must be greater than 0")
