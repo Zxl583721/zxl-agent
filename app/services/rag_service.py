@@ -1,16 +1,36 @@
 from collections.abc import Generator
+from pathlib import Path
 
-from app.core.config import get_settings
+from app.core.config import BASE_DIR, get_settings
 from app.services.persistence_service import persistence_service
 from app.utils.files import kb_collection_name, tenant_vector_dir
 from src.rag_agent import RAGAgent
 from src.retriever import ChromaRetriever
+from src.reranker import RerankerSelection, build_reranker
 from src.zhipu_llm import MAX_HISTORY_MESSAGES
 
 
 class RAGService:
     def __init__(self) -> None:
         self.settings = get_settings()
+        self._reranker_selection: RerankerSelection | None = None
+
+    def initialize_reranker(self) -> RerankerSelection:
+        """Load the configured reranker once during application startup."""
+        if self._reranker_selection is not None:
+            return self._reranker_selection
+
+        model_path = self.settings.bge_reranker_model_path
+        if not Path(model_path).is_absolute():
+            model_path = str(BASE_DIR / model_path)
+        self._reranker_selection = build_reranker(
+            self.settings.reranker_provider,
+            model_path=model_path,
+            use_fp16=self.settings.bge_reranker_use_fp16,
+            batch_size=self.settings.bge_reranker_batch_size,
+            fallback_provider=self.settings.reranker_fallback,
+        )
+        return self._reranker_selection
 
     def _create_agent(self, *, user_id: int, knowledge_base_id: int) -> RAGAgent:
         metadata_filter = {"$and": [{"user_id": user_id}, {"knowledge_base_id": knowledge_base_id}]}
@@ -19,7 +39,13 @@ class RAGService:
             collection_name=kb_collection_name(knowledge_base_id),
             metadata_filter=metadata_filter,
         )
-        return RAGAgent(retriever=retriever)
+        selection = self.initialize_reranker()
+        return RAGAgent(
+            retriever=retriever,
+            reranker=selection.reranker,
+            reranker_provider=selection.active_provider,
+            reranker_setup_error=selection.setup_error,
+        )
 
     def chat(
         self,

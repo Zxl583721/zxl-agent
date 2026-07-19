@@ -1,6 +1,14 @@
 import re
 
-from config import LLM_MODEL, LLM_PROVIDER
+from config import (
+    BGE_RERANKER_BATCH_SIZE,
+    BGE_RERANKER_MODEL_PATH,
+    BGE_RERANKER_USE_FP16,
+    LLM_MODEL,
+    LLM_PROVIDER,
+    RERANKER_FALLBACK,
+    RERANKER_PROVIDER,
+)
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -8,7 +16,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from src.model_provider import get_chat_model
 from src.query_expander import expand_keyword_queries
 from src.query_rewriter import LLMQueryRewriter
-from src.reranker import LightweightReranker
+from src.reranker import build_reranker
 from src.zhipu_llm import DEFAULT_SYSTEM_PROMPT, MAX_HISTORY_MESSAGES
 
 
@@ -30,10 +38,30 @@ class RAGAgent:
         "优缺点",
     )
 
-    def __init__(self, retriever):
+    def __init__(
+        self,
+        retriever,
+        *,
+        reranker=None,
+        reranker_provider: str | None = None,
+        reranker_setup_error: str = "",
+    ):
         self.retriever = retriever
         self.query_rewriter = LLMQueryRewriter()
-        self.reranker = LightweightReranker()
+        if reranker is None:
+            selection = build_reranker(
+                reranker_provider or RERANKER_PROVIDER,
+                model_path=BGE_RERANKER_MODEL_PATH,
+                use_fp16=BGE_RERANKER_USE_FP16,
+                batch_size=BGE_RERANKER_BATCH_SIZE,
+                fallback_provider=RERANKER_FALLBACK,
+            )
+            reranker = selection.reranker
+            reranker_provider = selection.active_provider
+            reranker_setup_error = selection.setup_error
+        self.reranker = reranker
+        self.reranker_provider = reranker_provider or "custom"
+        self.reranker_setup_error = reranker_setup_error
         self.chain = self._build_chain()
         self.general_chain = self._build_general_chain()
 

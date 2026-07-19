@@ -42,6 +42,16 @@ class Settings:
     celery_result_serializer = os.getenv("CELERY_RESULT_SERIALIZER", "json")
     celery_accept_content = os.getenv("CELERY_ACCEPT_CONTENT", "json")
 
+    # Retrieval reranking. BGE is optional; lightweight remains the safe default.
+    reranker_provider = os.getenv("RERANKER_PROVIDER", "lightweight").strip().lower()
+    reranker_fallback = os.getenv("RERANKER_FALLBACK", "lightweight").strip().lower()
+    bge_reranker_model_path = os.getenv(
+        "BGE_RERANKER_MODEL_PATH",
+        str(BASE_DIR / "models" / "bge-reranker-v2-m3"),
+    ).strip()
+    bge_reranker_use_fp16 = os.getenv("BGE_RERANKER_USE_FP16", "false").strip().lower() == "true"
+    bge_reranker_batch_size = int(os.getenv("BGE_RERANKER_BATCH_SIZE", "8"))
+
     @property
     def database_url(self) -> str:
         explicit_url = os.getenv("DATABASE_URL", "").strip()

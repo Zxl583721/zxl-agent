@@ -1,7 +1,9 @@
 import math
 import re
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 
 LATIN_TOKEN_PATTERN = re.compile(r"[a-zA-Z0-9_]+")
@@ -148,6 +150,76 @@ class BGEReranker:
 
         scored_chunks.sort(key=lambda item: item[0], reverse=True)
         return [chunk for _, chunk in scored_chunks[:top_k]]
+
+
+@dataclass(frozen=True)
+class RerankerSelection:
+    """The configured reranker and any startup warning produced while loading it."""
+
+    reranker: Any
+    requested_provider: str
+    active_provider: str
+    setup_error: str = ""
+
+
+def build_reranker(
+    provider: str = "lightweight",
+    *,
+    model_path: str | Path = "models/bge-reranker-v2-m3",
+    use_fp16: bool = False,
+    batch_size: int = 8,
+    fallback_provider: str = "lightweight",
+) -> RerankerSelection:
+    """Build the configured reranker while keeping the lightweight fallback available.
+
+    BGE is intentionally loaded only when selected. This keeps the default local
+    startup cheap and makes the optional model dependency fail in a controlled,
+    user-visible way.
+    """
+
+    requested_provider = str(provider or "lightweight").strip().lower()
+    fallback_provider = str(fallback_provider or "lightweight").strip().lower()
+
+    if requested_provider == "lightweight":
+        return RerankerSelection(
+            reranker=LightweightReranker(),
+            requested_provider=requested_provider,
+            active_provider="lightweight",
+        )
+
+    if requested_provider != "bge":
+        raise ValueError(
+            f"RERANKER_PROVIDER 配置无效：{provider!r}。可选值为 lightweight 或 bge。"
+        )
+    if fallback_provider != "lightweight":
+        raise ValueError(
+            f"RERANKER_FALLBACK 配置无效：{fallback_provider!r}。当前只支持 lightweight。"
+        )
+
+    try:
+        reranker = BGEReranker(
+            model_path=model_path,
+            use_fp16=use_fp16,
+            batch_size=batch_size,
+        )
+    except Exception as exc:
+        message = (
+            "BGE reranker 启用失败，已回退到 lightweight。"
+            f"请检查 RERANKER_PROVIDER、BGE_RERANKER_MODEL_PATH 以及 FlagEmbedding/torch 依赖。"
+            f" 原因：{exc}"
+        )
+        return RerankerSelection(
+            reranker=LightweightReranker(),
+            requested_provider=requested_provider,
+            active_provider="lightweight",
+            setup_error=message,
+        )
+
+    return RerankerSelection(
+        reranker=reranker,
+        requested_provider=requested_provider,
+        active_provider="bge",
+    )
 
 
 def tokenize(text: str) -> Counter:

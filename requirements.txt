@@ -24,3 +24,5 @@ sniffio>=1.3.1
 pypdf>=6.4.0
 python-docx>=1.1.2
 python-pptx>=1.0.2
+# Optional BGE cross-encoder reranker (the app falls back to lightweight when unavailable).
+FlagEmbedding>=1.3.5

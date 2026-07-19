@@ -68,12 +68,18 @@ services:
       EMBEDDING_BASE_URL: http://host.docker.internal:11434
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-bge-m3}
       ZHIPUAI_API_KEY: ${ZHIPUAI_API_KEY:-}
+      RERANKER_PROVIDER: ${RERANKER_PROVIDER:-lightweight}
+      RERANKER_FALLBACK: ${RERANKER_FALLBACK:-lightweight}
+      BGE_RERANKER_MODEL_PATH: ${BGE_RERANKER_MODEL_PATH:-/app/models/bge-reranker-v2-m3}
+      BGE_RERANKER_USE_FP16: ${BGE_RERANKER_USE_FP16:-false}
+      BGE_RERANKER_BATCH_SIZE: ${BGE_RERANKER_BATCH_SIZE:-8}
     command: sh -c "python scripts/init_db.py && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     ports:
       - "8000:8000"
     volumes:
       - ./data:/app/data
       - ./vector_store:/app/vector_store
+      - ./models:/app/models
 
   celery_worker:
     build: .
@@ -90,6 +96,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./vector_store:/app/vector_store
+      - ./models:/app/models
 
 volumes:
   mysql_data:

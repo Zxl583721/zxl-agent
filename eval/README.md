@@ -14,6 +14,13 @@ python eval/eval_retrieval.py --queries eval/retrieval_cases.jsonl --top-k 5 -v
 python eval/eval_multiturn.py --queries eval/multiturn_cases.jsonl --top-k 5 -v
 ```
 
+如果当前环境没有 BGE 依赖或模型，可先只跑线上 lightweight 配置；需要重新跑 BGE 时再补齐 `FlagEmbedding` 和本地模型目录：
+
+```bash
+python eval/eval_retrieval.py --queries eval/retrieval_cases.jsonl --configs hybrid_expanded,full --top-k 5
+python eval/eval_retrieval.py --queries eval/retrieval_cases.jsonl --configs bge --bge-model models/bge-reranker-v2-m3 --top-k 5
+```
+
 ## 2. 做 chunk 级标注
 
 用标注辅助脚本查看候选 chunk：

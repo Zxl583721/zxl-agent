@@ -169,6 +169,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--collection-name", default="", help="Chroma collection 名称，默认使用项目配置。")
     parser.add_argument("--top-k", type=int, default=5, help="计算 Recall/MRR/NDCG 的 K。")
     parser.add_argument("--candidate-k", type=int, default=20, help="Reranker 前召回候选数。")
+    parser.add_argument(
+        "--configs",
+        default=",".join(config for config, _ in CONFIGS),
+        help="逗号分隔的评测配置；例如 full，避免未安装 BGE 时阻塞 lightweight 对比。",
+    )
     parser.add_argument("--bge-model", type=Path, default=PROJECT_ROOT / "models/bge-reranker-v2-m3")
     parser.add_argument("--bge-batch-size", type=int, default=8)
     parser.add_argument("--verbose", "-v", action="store_true", help="打印低召回样例。")
@@ -177,16 +182,24 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    selected_configs = [item.strip() for item in args.configs.split(",") if item.strip()]
+    known_configs = {config for config, _ in CONFIGS}
+    unknown_configs = sorted(set(selected_configs) - known_configs)
+    if unknown_configs:
+        print(f"评估失败：未知配置 {unknown_configs}，可选值为 {sorted(known_configs)}。")
+        return 1
+    if not selected_configs:
+        print("评估失败：至少选择一个配置。")
+        return 1
     cases = load_json_or_jsonl(args.queries)
     if not cases:
         print(f"评估失败：{args.queries} 为空。")
         return 1
 
     retriever = init_retriever(args.vector_dir, args.collection_name or None)
-    rerankers = {
-        "lightweight": LightweightReranker(),
-        "bge": BGEReranker(args.bge_model, use_fp16=False, batch_size=args.bge_batch_size),
-    }
+    rerankers = {"lightweight": LightweightReranker()}
+    if "bge" in selected_configs:
+        rerankers["bge"] = BGEReranker(args.bge_model, use_fp16=False, batch_size=args.bge_batch_size)
     results = [
         evaluate_config(
             retriever,
@@ -196,7 +209,7 @@ def main() -> int:
             candidate_k=args.candidate_k,
             rerankers=rerankers,
         )
-        for config, _ in CONFIGS
+        for config in selected_configs
     ]
     print_summary(results, top_k=args.top_k, verbose=args.verbose)
     return 0

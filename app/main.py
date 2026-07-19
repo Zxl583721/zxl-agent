@@ -12,6 +12,7 @@ from app.core.logging import configure_logging, get_logger
 from app.db.base import Base
 from app.db.migrations import apply_compat_migrations
 from app.db.session import engine
+from app.services.rag_service import get_rag_service
 
 
 logger = get_logger(__name__)
@@ -19,6 +20,14 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    reranker_selection = get_rag_service().initialize_reranker()
+    if reranker_selection.setup_error:
+        logger.error(reranker_selection.setup_error)
+    logger.info(
+        "RAG reranker ready: requested=%s active=%s",
+        reranker_selection.requested_provider,
+        reranker_selection.active_provider,
+    )
     try:
         Base.metadata.create_all(bind=engine)
         apply_compat_migrations()

@@ -23,3 +23,14 @@ EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", LLM_PROVIDER).strip().lower
 EMBEDDING_BASE_URL = os.getenv("EMBEDDING_BASE_URL", "http://localhost:11434").strip().rstrip("/")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "bge-m3").strip()
 OLLAMA_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", "120"))
+
+# Retrieval reranking. Keep the lightweight implementation as the default and
+# opt into the evaluated BGE cross-encoder through environment variables.
+RERANKER_PROVIDER = os.getenv("RERANKER_PROVIDER", "lightweight").strip().lower()
+RERANKER_FALLBACK = os.getenv("RERANKER_FALLBACK", "lightweight").strip().lower()
+BGE_RERANKER_MODEL_PATH = os.getenv(
+    "BGE_RERANKER_MODEL_PATH",
+    str(BASE_DIR / "models" / "bge-reranker-v2-m3"),
+).strip()
+BGE_RERANKER_USE_FP16 = os.getenv("BGE_RERANKER_USE_FP16", "false").strip().lower() == "true"
+BGE_RERANKER_BATCH_SIZE = int(os.getenv("BGE_RERANKER_BATCH_SIZE", "8"))
