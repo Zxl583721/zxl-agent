@@ -1,4 +1,5 @@
 import re
+from dataclasses import dataclass
 
 from config import (
     BGE_RERANKER_BATCH_SIZE,
@@ -20,22 +21,47 @@ from src.reranker import build_reranker
 from src.zhipu_llm import DEFAULT_SYSTEM_PROMPT, MAX_HISTORY_MESSAGES
 
 
+@dataclass(frozen=True)
+class RetrievalQuestion:
+    """The query used for retrieval and the rewrite decision behind it."""
+
+    question: str
+    rewrite_attempted: bool
+    rewrite_applied: bool
+
+
 class RAGAgent:
     MAX_RETRIEVAL_HISTORY_MESSAGES = 4
     CANDIDATE_CHUNKS = 20
     FINAL_CHUNKS = 3
-    FOLLOW_UP_MARKERS = ("他", "它", "其", "这个", "那个", "上述", "前面", "刚才")
+    # A single-character substring check for "他" incorrectly treats words such as
+    # "其他" as anaphora.  These patterns deliberately target pronouns and explicit
+    # discourse references instead.
+    FOLLOW_UP_PATTERNS = (
+        re.compile(r"(?<!其)他(?=(?:们|的|是|在|有|会|能|可|和|与|跟|，|。|？|！|、|\s|$))"),
+        re.compile(r"(?:她|它|这个|那个|这些|那些|上述|前面|刚才|前述)"),
+        re.compile(r"(?<!应)该(?=(?:的|是|在|有|会|能|可|如何|怎么|，|。|？|！|、|\s|$))"),
+    )
     SOURCE_CITATION_PATTERN = re.compile(r"\[资料\s*(\d+)\]")
-    CONTEXT_DEPENDENT_PATTERNS = (
-        "有哪些影响",
-        "有哪些因素",
-        "有什么影响",
-        "为什么",
-        "怎么",
-        "如何",
-        "区别",
-        "联系",
-        "优缺点",
+    GENERIC_FOLLOW_UP_QUESTIONS = frozenset(
+        {
+            "为什么",
+            "怎么",
+            "如何",
+            "然后",
+            "还有",
+            "还有哪些",
+            "具体呢",
+            "详细说说",
+            "什么意思",
+            "原理",
+            "区别",
+            "联系",
+            "优缺点",
+            "有哪些影响",
+            "有哪些因素",
+            "有什么影响",
+        }
     )
 
     def __init__(
@@ -106,8 +132,8 @@ class RAGAgent:
             }
 
         try:
-            rewrite_triggered = self._should_rewrite_question(question, history)
-            retrieval_question = self._rewrite_retrieval_question(question, history)
+            retrieval = self._prepare_retrieval_question(question, history)
+            retrieval_question = retrieval.question
             retrieved_chunks = self.retriever.retrieve(
                 retrieval_question,
                 top_k=self.CANDIDATE_CHUNKS,
@@ -139,7 +165,8 @@ class RAGAgent:
             "sources": sources,
             "citation_status": self._citation_status(answer, sources),
             "retrieval_question": retrieval_question,
-            "rewrite_triggered": rewrite_triggered,
+            "rewrite_triggered": retrieval.rewrite_attempted,
+            "rewrite_applied": retrieval.rewrite_applied,
         }
 
     def stream_with_sources(self, question: str, history: list[dict] | None = None):
@@ -161,8 +188,8 @@ class RAGAgent:
             return
 
         try:
-            rewrite_triggered = self._should_rewrite_question(question, history)
-            retrieval_question = self._rewrite_retrieval_question(question, history)
+            retrieval = self._prepare_retrieval_question(question, history)
+            retrieval_question = retrieval.question
             retrieved_chunks = self.retriever.retrieve(
                 retrieval_question,
                 top_k=self.CANDIDATE_CHUNKS,
@@ -189,7 +216,8 @@ class RAGAgent:
             "sources": sources,
             "mode": "knowledge",
             "retrieval_question": retrieval_question,
-            "rewrite_triggered": rewrite_triggered,
+            "rewrite_triggered": retrieval.rewrite_attempted,
+            "rewrite_applied": retrieval.rewrite_applied,
         }
 
         for token in self.chain.stream(
@@ -342,20 +370,39 @@ class RAGAgent:
         context = "\n".join(recent_user_messages[-cls.MAX_RETRIEVAL_HISTORY_MESSAGES :])
         return f"{context}\n{question}"
 
-    def _rewrite_retrieval_question(self, question: str, history: list[dict] | None) -> str:
+    def _prepare_retrieval_question(self, question: str, history: list[dict] | None) -> RetrievalQuestion:
+        """Build the retrieval query once, keeping the decision observable."""
         if not self._should_rewrite_question(question, history):
-            return question
+            return RetrievalQuestion(question=question, rewrite_attempted=False, rewrite_applied=False)
 
         fallback_question = self._resolve_question(question, history)
-        return self.query_rewriter.rewrite(
+        rewritten_question = self.query_rewriter.rewrite(
             question=question,
             history=history,
             fallback_question=fallback_question,
         )
+        return RetrievalQuestion(
+            question=rewritten_question,
+            rewrite_attempted=True,
+            rewrite_applied=self._normalize_question(rewritten_question) != self._normalize_question(question),
+        )
+
+    def _rewrite_retrieval_question(self, question: str, history: list[dict] | None) -> str:
+        """Compatibility wrapper for evaluators and existing integrations."""
+        return self._prepare_retrieval_question(question, history).question
 
     @classmethod
     def _is_follow_up(cls, question: str) -> bool:
-        return any(marker in question for marker in cls.FOLLOW_UP_MARKERS)
+        normalized = cls._normalize_question(question)
+        if not normalized:
+            return False
+        if any(pattern.search(normalized) for pattern in cls.FOLLOW_UP_PATTERNS):
+            return True
+        if normalized in cls.GENERIC_FOLLOW_UP_QUESTIONS:
+            return True
+        # "雷达呢？" and "具体怎么做呢？" normally omit a relation to the
+        # current topic, unlike a complete short question such as "雷达是什么？".
+        return len(normalized) <= 12 and normalized.endswith("呢")
 
     @classmethod
     def _should_rewrite_question(cls, question: str, history: list[dict] | None) -> bool:
@@ -365,14 +412,11 @@ class RAGAgent:
         stripped_question = question.strip()
         if not stripped_question:
             return False
-        if cls._is_follow_up(stripped_question):
-            return True
+        return cls._is_follow_up(stripped_question)
 
-        # Short elliptical questions often depend on the previous topic.
-        if len(stripped_question) <= 12:
-            return True
-
-        return any(pattern in stripped_question for pattern in cls.CONTEXT_DEPENDENT_PATTERNS)
+    @staticmethod
+    def _normalize_question(question: str) -> str:
+        return re.sub(r"[\s，。！？、,.!?]+", "", question).strip()
 
     @staticmethod
     def _build_chain():

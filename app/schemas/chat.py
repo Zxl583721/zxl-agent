@@ -31,3 +31,4 @@ class ChatResponse(BaseModel):
     citation_status: dict[str, Any] | None = None
     retrieval_question: str | None = None
     rewrite_triggered: bool | None = None
+    rewrite_applied: bool | None = None
