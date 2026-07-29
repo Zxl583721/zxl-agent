@@ -14,3 +14,12 @@ conversation_store.sqlite3*
 models/
 
 .DS_Store
+
+# Private resume and interview-preparation materials. Keep these local only.
+/resume/
+/简历/
+/面试问答/
+/tmp/pdfs/
+/scripts/generate_backend_interview_pdfs.py
+/scripts/generate_interview_pdf.py
+/scripts/generate_rag_eval_pdf.py
