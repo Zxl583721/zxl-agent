@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from app.models import DocumentStatus, TaskStatus
 from app.services.persistence_service import persistence_service
 from app.services.redis_service import redis_service
@@ -30,6 +32,9 @@ def index_document(
     persistence_service.update_document_status(document_id, DocumentStatus.PROCESSING, user_id=user_id)
 
     try:
+        document = persistence_service.get_document(document_id, user_id) if document_id is not None else None
+        if document is None:
+            raise RuntimeError("Document record is missing")
         if not build_index(
             data_dir=tenant_data_dir(user_id, knowledge_base_id),
             vector_store_dir=tenant_vector_dir(knowledge_base_id),
@@ -37,11 +42,16 @@ def index_document(
             knowledge_base_id=knowledge_base_id,
             document_id=document_id,
             collection_name=kb_collection_name(knowledge_base_id),
+            display_filenames=persistence_service.get_document_display_names(
+                user_id=user_id,
+                knowledge_base_id=knowledge_base_id,
+            ),
         ):
             raise RuntimeError("build_index returned False")
 
         manifest = load_manifest(tenant_vector_dir(knowledge_base_id) / "index_manifest.json")
-        chunk_count = manifest.get("files", {}).get(filename, {}).get("chunk_count", 0)
+        storage_filename = Path(document.file_path).name
+        chunk_count = manifest.get("files", {}).get(storage_filename, {}).get("chunk_count", 0)
         persistence_service.update_document_status(
             document_id,
             DocumentStatus.COMPLETED,

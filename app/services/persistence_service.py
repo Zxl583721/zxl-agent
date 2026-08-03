@@ -153,6 +153,17 @@ class PersistenceService:
         with SessionLocal() as db:
             return db.scalar(select(Document).where(Document.id == document_id, Document.user_id == user_id))
 
+    def get_document_display_names(self, *, user_id: int, knowledge_base_id: int) -> dict[str, str]:
+        """Map private storage filenames to the user-visible document names."""
+        with SessionLocal() as db:
+            documents = db.scalars(
+                select(Document).where(
+                    Document.user_id == user_id,
+                    Document.knowledge_base_id == knowledge_base_id,
+                )
+            )
+            return {Path(document.file_path).name: document.filename for document in documents}
+
     def delete_document(self, *, document_id: int, user_id: int) -> dict | None:
         try:
             with SessionLocal() as db:

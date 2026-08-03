@@ -1,4 +1,3 @@
-import shutil
 from pathlib import Path
 from uuid import uuid4
 
@@ -10,8 +9,10 @@ from app.services.persistence_service import persistence_service
 from app.services.redis_service import redis_service
 from app.tasks.document_tasks import index_document
 from app.utils.files import (
+    UploadTooLargeError,
     is_safe_child_path,
     kb_collection_name,
+    move_verified_upload_to_storage,
     sanitize_filename,
     tenant_data_dir,
     tenant_vector_dir,
@@ -42,12 +43,21 @@ class KnowledgeService:
         knowledge_base_id = int(document["knowledge_base_id"])
         file_path = Path(str(document["file_path"]))
         target_dir = tenant_data_dir(user_id, knowledge_base_id)
+        file_entry = None
         if is_safe_child_path(file_path, target_dir) and file_path.exists():
             file_path.unlink()
-
-        manifest_path = tenant_vector_dir(knowledge_base_id) / "index_manifest.json"
-        manifest = load_manifest(manifest_path)
-        file_entry = manifest.get("files", {}).pop(document["filename"], None)
+        if is_safe_child_path(file_path, target_dir):
+            manifest_path = tenant_vector_dir(knowledge_base_id) / "index_manifest.json"
+            manifest = load_manifest(manifest_path)
+            storage_key = file_path.relative_to(target_dir).as_posix()
+            file_entry = manifest.get("files", {}).pop(storage_key, None)
+            # Documents stored before UUID filenames used the display name as
+            # their manifest key. Keep deleting those legacy entries correctly.
+            if file_entry is None:
+                file_entry = manifest.get("files", {}).pop(document["filename"], None)
+        else:
+            manifest_path = tenant_vector_dir(knowledge_base_id) / "index_manifest.json"
+            manifest = load_manifest(manifest_path)
         if file_entry:
             try:
                 vectorstore = get_chroma_vectorstore(
@@ -138,20 +148,17 @@ class KnowledgeService:
             original_name = uploaded_file.filename or ""
             filename = sanitize_filename(original_name)
             suffix = Path(filename).suffix.lower()
-            temp_path = write_upload_to_temp(uploaded_file)
+            temp_path: Path | None = None
 
             try:
+                temp_path = write_upload_to_temp(uploaded_file, target_dir)
                 valid, reason = validate_upload_file(temp_path, filename, uploaded_file.content_type)
                 if not filename or suffix not in SUPPORTED_EXTENSIONS or not valid:
                     rejected_files.append(f"{original_name or '未命名文件'}:{reason}")
                     continue
 
-                save_path = target_dir / filename
-                if not is_safe_child_path(save_path, target_dir):
-                    rejected_files.append(f"{original_name or '未命名文件'}:invalid_path")
-                    continue
-
-                shutil.move(str(temp_path), save_path)
+                save_path = move_verified_upload_to_storage(temp_path, target_dir, suffix)
+                temp_path = None
                 file_hash = hash_file(save_path)
                 document_id = persistence_service.create_document_record(
                     filename=filename,
@@ -161,6 +168,10 @@ class KnowledgeService:
                     user_id=user_id,
                     knowledge_base_id=knowledge_base_id,
                 )
+                if document_id is None:
+                    save_path.unlink(missing_ok=True)
+                    rejected_files.append(f"{original_name or '未命名文件'}:storage_error")
+                    continue
                 task_id = uuid4().hex
                 task_id = persistence_service.create_task_record(
                     task_type="document_index",
@@ -186,8 +197,10 @@ class KnowledgeService:
                 document_records.append({"filename": filename, "document_id": document_id, "task_id": task_id})
                 if task_id:
                     task_ids.append(task_id)
+            except UploadTooLargeError:
+                rejected_files.append(f"{original_name or '未命名文件'}:file_too_large")
             finally:
-                if temp_path.exists():
+                if temp_path is not None and temp_path.exists():
                     temp_path.unlink(missing_ok=True)
 
         if not saved_files:

@@ -19,6 +19,9 @@ class Settings:
     data_dir = BASE_DIR / "data"
     vector_store_dir = BASE_DIR / "vector_store"
     max_upload_bytes = int(os.getenv("MAX_UPLOAD_BYTES", str(20 * 1024 * 1024)))
+    max_archive_uncompressed_bytes = int(
+        os.getenv("MAX_ARCHIVE_UNCOMPRESSED_BYTES", str(100 * 1024 * 1024))
+    )
     log_level = os.getenv("LOG_LEVEL", "INFO")
     jwt_secret_key = os.getenv("JWT_SECRET_KEY", "change_me_to_a_32_plus_char_random_secret")
     jwt_algorithm = os.getenv("JWT_ALGORITHM", "HS256")

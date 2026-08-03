@@ -53,6 +53,7 @@ def build_documents_for_file(
     user_id: int | None = None,
     knowledge_base_id: int | None = None,
     document_id: int | None = None,
+    display_filename: str | None = None,
 ) -> tuple[list[Document], dict[str, dict]]:
     """Load one file and split it into chapter-aware LangChain documents."""
     pages = []
@@ -62,7 +63,7 @@ def build_documents_for_file(
             pages.append(
                 {
                     "source": str(file_path),
-                    "filename": file_path.name,
+                    "filename": display_filename or file_path.name,
                     "page": page.get("page"),
                     "text": text,
                 }
@@ -190,6 +191,7 @@ def build_index(
     knowledge_base_id: int | None = None,
     document_id: int | None = None,
     collection_name: str | None = None,
+    display_filenames: dict[str, str] | None = None,
 ) -> bool:
     """Build a local Chroma vector index under vector_store/."""
     try:
@@ -280,6 +282,7 @@ def build_index(
                 user_id=user_id,
                 knowledge_base_id=knowledge_base_id,
                 document_id=document_id,
+                display_filename=(display_filenames or {}).get(file_key),
             )
         except RuntimeError as exc:
             logger.error("文档读取失败：%s：%s", file_key, exc)
