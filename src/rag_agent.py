@@ -43,6 +43,14 @@ class RAGAgent:
         re.compile(r"(?<!应)该(?=(?:的|是|在|有|会|能|可|如何|怎么|，|。|？|！|、|\s|$))"),
     )
     SOURCE_CITATION_PATTERN = re.compile(r"\[资料\s*(\d+)\]")
+    # The answer prompt asks the model to use one of these explicit phrases when
+    # the retrieved evidence conflicts.  Keeping this deliberately narrow avoids
+    # treating ordinary comparisons or qualifications as contradictions.
+    CONFLICT_RESPONSE_PATTERN = re.compile(
+        r"(?:资料|来源).{0,16}(?:相互)?(?:冲突|矛盾|不一致)|"
+        r"(?:相互)?(?:冲突|矛盾|不一致).{0,16}(?:资料|来源)",
+        re.DOTALL,
+    )
     GENERIC_FOLLOW_UP_QUESTIONS = frozenset(
         {
             "为什么",
@@ -284,6 +292,23 @@ class RAGAgent:
             return answer
 
         status = cls._citation_status(answer, sources)
+        if status["conflict_detected"]:
+            # A conclusion that says the sources disagree must expose both sides.
+            # Adding this only as a guardrail preserves the model's sentence-level
+            # citations when it follows the prompt correctly.
+            missing_source_ids = [
+                source_id
+                for source_id in status["available_source_ids"]
+                if source_id not in status["valid_cited_source_ids"]
+            ]
+            if not missing_source_ids:
+                return answer
+
+            conflict_citations = "、".join(
+                f"[资料 {source_id}]" for source_id in status["available_source_ids"]
+            )
+            return f"{answer}\n\n冲突资料：{conflict_citations}"
+
         if status["valid_citation_count"] > 0:
             return answer
 
@@ -314,12 +339,19 @@ class RAGAgent:
             for source_id in set(cited_source_ids)
             if source_id in valid_source_ids
         )
+        conflict_detected = bool(cls.CONFLICT_RESPONSE_PATTERN.search(str(answer)))
 
         return {
             "has_citation": bool(cited_source_ids),
             "valid_citation_count": len(valid_cited_source_ids),
             "cited_source_ids": cited_source_ids,
             "valid_cited_source_ids": valid_cited_source_ids,
+            "available_source_ids": sorted(valid_source_ids),
+            "conflict_detected": conflict_detected,
+            "conflict_citation_complete": (
+                not conflict_detected
+                or valid_source_ids.issubset(valid_cited_source_ids)
+            ),
         }
 
     @staticmethod
@@ -431,6 +463,9 @@ class RAGAgent:
 回答中如果引用具体资料，请优先结合资料的来源、章节和页码判断上下文。
 回答正文中需要引用资料时，只能使用【知识库资料】里已有的资料编号，例如 [资料 1]、[资料 2]。
 不要在回答正文中编造、改写或额外生成参考来源名称、章节或页码；参考来源会由系统根据检索结果单独展示。
+每个可核验的事实、数字、定义或判断，都应在对应句子或分句末尾紧邻标注支持它的 [资料 n]；不要用回答末尾的笼统引用替代逐项引用。
+如果不同资料对同一事实给出相互排斥的结论，必须明确写出“资料存在冲突”，分别陈述各自结论并紧邻引用双方资料。不得隐瞒其中一方，也不得把两种结论拼接成一个确定事实。
+只有当资料本身清楚给出版本、日期、适用条件、证据等级或权威性等可核验依据时，才可以说明为何某一结论在当前问题的条件下更适用；该判断也必须引用相应资料。没有这类依据时，应说明无法仅凭当前知识库裁决，并建议核验原始资料或最新版本。
 如果用户问题是追问，请结合历史对话解析“他/它/其/这个”等指代，只回答该指代对象。
 历史对话只用于理解当前问题的指代和上下文，不要复述、总结或回答历史问题。
 最终回答必须聚焦【用户问题】中的当前问题，不要把前几轮的问题或答案混入回答。
