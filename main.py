@@ -10,6 +10,8 @@ VECTOR_STORE_DIR = Path(__file__).parent / "vector_store"
 def build_agent() -> RAGAgent:
     """Load the local Chroma vector database and build the RAG agent."""
     retriever = ChromaRetriever(VECTOR_STORE_DIR)
+    if not retriever.setup_error:
+        retriever.warmup_keyword_index()
     return RAGAgent(retriever=retriever)
 
 

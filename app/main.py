@@ -13,6 +13,7 @@ from app.db.base import Base
 from app.db.migrations import apply_compat_migrations
 from app.db.session import engine
 from app.services.rag_service import get_rag_service
+from src.retriever import shutdown_retrieval_executor
 
 
 logger = get_logger(__name__)
@@ -33,7 +34,10 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         apply_compat_migrations()
     except Exception as exc:
         logger.warning("Database table initialization skipped: %s", exc.__class__.__name__)
-    yield
+    try:
+        yield
+    finally:
+        shutdown_retrieval_executor()
 
 
 def create_app() -> FastAPI:

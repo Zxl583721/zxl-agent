@@ -1,8 +1,10 @@
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor
 import json
 import math
 from pathlib import Path
 import re
+from threading import Lock
 
 from src.model_provider import get_embeddings
 
@@ -13,6 +15,31 @@ CJK_PATTERN = re.compile(r"[\u4e00-\u9fff]")
 COLLECTION_NAME = "personal_knowledge_base"
 RRF_K = 60
 PARENT_STORE_FILE = "parent_store.json"
+
+_RETRIEVAL_EXECUTOR: ThreadPoolExecutor | None = None
+_RETRIEVAL_EXECUTOR_LOCK = Lock()
+
+
+def get_retrieval_executor() -> ThreadPoolExecutor:
+    """Return the process-wide worker pool used by hybrid retrieval."""
+    global _RETRIEVAL_EXECUTOR
+    with _RETRIEVAL_EXECUTOR_LOCK:
+        if _RETRIEVAL_EXECUTOR is None:
+            _RETRIEVAL_EXECUTOR = ThreadPoolExecutor(
+                max_workers=4,
+                thread_name_prefix="hybrid-retrieval",
+            )
+        return _RETRIEVAL_EXECUTOR
+
+
+def shutdown_retrieval_executor() -> None:
+    """Stop the shared worker pool during application shutdown."""
+    global _RETRIEVAL_EXECUTOR
+    with _RETRIEVAL_EXECUTOR_LOCK:
+        executor = _RETRIEVAL_EXECUTOR
+        _RETRIEVAL_EXECUTOR = None
+    if executor is not None:
+        executor.shutdown(wait=True, cancel_futures=True)
 
 
 def _tokenize(text: str) -> list[str]:
@@ -93,6 +120,9 @@ class ChromaRetriever:
         self.keyword_index = None
         self.last_vector_error = ""
         self.vector_disabled = False
+        # The service creates retrievers per request, so the pool is shared
+        # process-wide instead of being recreated for every retriever.
+        self._retrieval_executor = get_retrieval_executor()
         self.parent_store = self._load_parent_store()
 
         try:
@@ -121,10 +151,21 @@ class ChromaRetriever:
             return []
 
         recall_k = max(top_k * 2, top_k)
-        vector_chunks = self._vector_retrieve(query, recall_k)
-        keyword_chunks = self._keyword_retrieve_many([query, *(keyword_queries or [])], recall_k)
+        keyword_searches = [query, *(keyword_queries or [])]
+        vector_future = self._retrieval_executor.submit(self._vector_retrieve, query, recall_k)
+        keyword_future = self._retrieval_executor.submit(
+            self._keyword_retrieve_many,
+            keyword_searches,
+            recall_k,
+        )
+        vector_chunks = vector_future.result()
+        keyword_chunks = keyword_future.result()
         fused_chunks = self._rrf_fuse(vector_chunks, keyword_chunks, top_k=recall_k)
         return self._expand_parent_chunks(fused_chunks, top_k=top_k)
+
+    def warmup_keyword_index(self) -> None:
+        """Build the BM25 index before handling the first retrieval request."""
+        self._get_keyword_index()
 
     def _vector_retrieve(self, query: str, top_k: int) -> list[dict]:
         if self.vector_disabled:
